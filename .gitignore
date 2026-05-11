@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+*.log
+.pnpm-debug.log*
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
+
+# Tests / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local dev
+*.sqlite
+*.sqlite3
+*.db
+
+# Frontend env
+.env.local
+.env*.local
+
+# Old legacy build artefacts of the prototype
+backend/legacy/__pycache__/

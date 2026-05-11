@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>غرفه من | افزودن محصول</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260507-mobile-wizard" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>افزودن محصول به غرفه</h1>
+          <p>پیش‌نویس محصول‌های غرفه شما</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="loadCategoriesBtn" type="button">به‌روزرسانی دسته‌ها</button>
+          <button id="clearDataBtn" type="button" class="danger">پاک کردن اطلاعات</button>
+        </div>
+      </header>
+
+      <details id="settingsPanel" class="settings-panel" open>
+        <summary>تنظیمات اتصال</summary>
+        <section class="settings-grid" aria-label="تنظیمات">
+          <label>
+            توکن دسترسی باسلام
+            <input id="basalamToken" type="password" autocomplete="off" placeholder="Bearer token" />
+          </label>
+          <label>
+            کلید هوش مصنوعی
+            <input id="openRouterKey" type="password" autocomplete="off" placeholder="sk-or-..." />
+          </label>
+          <label>
+            مدل شناسایی محصول
+            <input id="openRouterModel" type="text" value="google/gemini-2.5-flash" />
+          </label>
+          <label>
+            مدل ویرایش عکس
+            <input id="openRouterImageModel" type="text" value="google/gemini-2.5-flash-image" />
+          </label>
+          <label>
+            شناسه غرفه
+            <input id="vendorId" type="number" inputmode="numeric" placeholder="خودکار یا دستی" />
+          </label>
+          <label>
+            موجودی اولیه
+            <input id="defaultStock" type="number" inputmode="numeric" value="1" />
+          </label>
+          <label>
+            زمان آماده‌سازی
+            <input id="defaultPreparationDays" type="number" inputmode="numeric" value="3" />
+          </label>
+          <div class="settings-actions">
+            <button id="saveSettingsBtn" type="button">ذخیره</button>
+            <button id="verifyTokenBtn" type="button">شناسایی غرفه</button>
+          </div>
+        </section>
+      </details>
+
+      <section class="import-toolbar" aria-label="ورود محصول">
+        <label class="file-drop">
+          <span>افزودن عکس محصول</span>
+          <input id="imageInput" type="file" accept="image/*" multiple />
+        </label>
+        <div id="statusLine" class="status-line">آماده</div>
+      </section>
+
+      <section id="mobileWorkflow" class="mobile-workflow" aria-label="ورود موبایل محصولات">
+        <div id="mobileQueue" class="mobile-queue"></div>
+        <section id="mobileWizard" class="mobile-wizard" aria-label="ویزارد محصول" hidden></section>
+      </section>
+
+      <section class="table-wrap" aria-label="جدول محصولات">
+        <table id="productsTable">
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <datalist id="categoryOptions"></datalist>
+
+    <dialog id="submitDialog">
+      <form method="dialog" class="submit-dialog">
+        <h2>ثبت محصول در غرفه؟</h2>
+        <p>بعد از تایید، این محصول در غرفه شما ثبت می‌شود.</p>
+        <pre id="payloadPreview"></pre>
+        <div class="dialog-actions">
+          <button value="cancel" type="submit">انصراف</button>
+          <button id="confirmSubmitBtn" value="confirm" type="button" class="primary">ثبت محصول</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="imagePreviewDialog">
+      <form method="dialog" class="image-preview-dialog">
+        <header class="preview-header">
+          <div>
+            <h2 id="imagePreviewTitle">مشاهده عکس</h2>
+            <p id="imagePreviewMeta"></p>
+          </div>
+          <button value="close" type="submit">بستن</button>
+        </header>
+        <div class="preview-switcher">
+          <button id="previewSelectedBtn" type="button">نسخه انتخابی</button>
+          <button id="previewEnhancedBtn" type="button">نسخه ویرایش‌شده</button>
+          <button id="previewOriginalBtn" type="button">عکس اصلی</button>
+        </div>
+        <div class="preview-canvas">
+          <img id="imagePreviewImg" alt="product preview" />
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/static/app.js?v=20260507-mobile-wizard" type="module"></script>
+  </body>
+</html>
