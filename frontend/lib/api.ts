@@ -1,5 +1,27 @@
 export type ApiError = { status: number; message: string; detail?: unknown };
 
+function extractErrorMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== "object") return fallback;
+  const b = body as Record<string, unknown>;
+  // Top-level message
+  if (typeof b.message === "string" && b.message.trim()) return b.message;
+  // FastAPI puts errors in `detail`. It can be:
+  //   - a plain string
+  //   - { message: string, ... }
+  //   - a list of pydantic validation errors [{loc, msg, type}, ...]
+  const detail = b.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    const d = detail as Record<string, unknown>;
+    if (typeof d.message === "string" && d.message.trim()) return d.message;
+  }
+  if (Array.isArray(detail)) {
+    const first = detail[0] as Record<string, unknown> | undefined;
+    if (first && typeof first.msg === "string") return first.msg;
+  }
+  return fallback;
+}
+
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const url = path.startsWith("/api/proxy") ? path : `/api/proxy${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
@@ -12,8 +34,11 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     const err: ApiError = {
       status: res.status,
-      message: (body as any)?.message || (body as any)?.detail || res.statusText,
-      detail: (body as any)?.detail,
+      message: extractErrorMessage(body, res.statusText),
+      detail:
+        body && typeof body === "object"
+          ? (body as Record<string, unknown>).detail
+          : undefined,
     };
     throw err;
   }
@@ -38,7 +63,9 @@ export type MeResponse = {
   balance: number;
 };
 
-export type ProductImageIn = { filename: string; data_url: string };
+export type ProductImageIn =
+  | { filename: string; data_url: string; file_id?: never }
+  | { filename?: string; data_url?: never; file_id: string };
 export type ProductCreateRequest = { description?: string | null; images: ProductImageIn[] };
 export type ProductCreatedResponse = { product_id: string; status: string };
 
@@ -48,6 +75,8 @@ export type ProductListItem = {
   name: string | null;
   category_title: string | null;
   price_final: number | null;
+  stock: number | null;
+  preparation_days: number | null;
   primary_image_url: string | null;
   created_at: string;
   basalam_product_id: number | null;

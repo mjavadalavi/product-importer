@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { X, Camera, Upload } from "lucide-react";
+import { X, Camera, Upload, Loader2, RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,15 +13,21 @@ import { api } from "@/lib/api";
 import type {
   ProductCreatedResponse,
   ProductCreateRequest,
+  ProductImageIn,
 } from "@/lib/api";
-import { uid, fileToDataUrl } from "@/lib/format";
+import { uid } from "@/lib/format";
+import { uploadFile } from "@/lib/api/files";
 import { InsufficientBalanceDialog } from "@/components/insufficient-balance-dialog";
 import { TopupDialog } from "@/components/topup-dialog";
 
 type SessionImage = {
   id: string;
-  dataUrl: string;
+  previewUrl: string; // object URL or data URL just for thumbnail rendering
   filename: string;
+  file: File;
+  fileId: string | null;
+  uploading: boolean;
+  error: string | null;
 };
 
 export default function CameraPage() {
@@ -87,6 +93,62 @@ export default function CameraPage() {
     };
   }, []);
 
+  // Track object URLs created with URL.createObjectURL so we can revoke them on unmount.
+  const objectUrlsRef = React.useRef<string[]>([]);
+  React.useEffect(() => {
+    return () => {
+      objectUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+      objectUrlsRef.current = [];
+    };
+  }, []);
+
+  const startUploadFor = React.useCallback((entry: SessionImage) => {
+    setSessionImages((prev) =>
+      prev.map((s) =>
+        s.id === entry.id ? { ...s, uploading: true, error: null } : s,
+      ),
+    );
+    uploadFile(entry.file, { kind: "product_image" })
+      .then((res) => {
+        setSessionImages((prev) =>
+          prev.map((s) =>
+            s.id === entry.id
+              ? { ...s, uploading: false, fileId: res.id, error: null }
+              : s,
+          ),
+        );
+      })
+      .catch((err: unknown) => {
+        const msg =
+          (err as { message?: string })?.message || "آپلود ناموفق بود";
+        setSessionImages((prev) =>
+          prev.map((s) =>
+            s.id === entry.id ? { ...s, uploading: false, error: msg } : s,
+          ),
+        );
+      });
+  }, []);
+
+  const addAndUpload = React.useCallback(
+    (file: File, baseFilename: string) => {
+      const id = uid();
+      const previewUrl = URL.createObjectURL(file);
+      objectUrlsRef.current.push(previewUrl);
+      const entry: SessionImage = {
+        id,
+        previewUrl,
+        filename: baseFilename,
+        file,
+        fileId: null,
+        uploading: false,
+        error: null,
+      };
+      setSessionImages((prev) => [...prev, entry]);
+      startUploadFor(entry);
+    },
+    [startUploadFor],
+  );
+
   const handleCapture = React.useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -99,48 +161,51 @@ export default function CameraPage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, width, height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-    const id = uid();
-    setSessionImages((prev) => [
-      ...prev,
-      { id, dataUrl, filename: `capture-${id}.jpg` },
-    ]);
-    setPopoverOpen(true);
-  }, []);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        const filename = `capture-${Date.now()}.jpg`;
+        const file = new File([blob], filename, { type: "image/jpeg" });
+        addAndUpload(file, filename);
+        setPopoverOpen(true);
+      },
+      "image/jpeg",
+      0.9,
+    );
+  }, [addAndUpload]);
 
-  const handlePickFiles = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handlePickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const next: SessionImage[] = [];
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      try {
-        const dataUrl = await fileToDataUrl(f);
-        const id = uid();
-        next.push({ id, dataUrl, filename: f.name || `upload-${id}.jpg` });
-      } catch {
-        // skip files that fail to read
-      }
+      addAndUpload(f, f.name || `upload-${uid()}.jpg`);
     }
-    if (next.length > 0) {
-      setSessionImages((prev) => [...prev, ...next]);
-      setPopoverOpen(true);
-    }
+    setPopoverOpen(true);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
+  const handleRetry = (id: string) => {
+    const entry = sessionImages.find((s) => s.id === id);
+    if (entry) startUploadFor(entry);
+  };
+
+  const allUploaded =
+    sessionImages.length > 0 &&
+    sessionImages.every((s) => !!s.fileId && !s.uploading && !s.error);
+  const anyUploading = sessionImages.some((s) => s.uploading);
+  const anyFailed = sessionImages.some((s) => !!s.error);
+
   const submit = useMutation({
     mutationFn: () => {
+      const images: ProductImageIn[] = sessionImages
+        .filter((i) => !!i.fileId)
+        .map((i) => ({ filename: i.filename, file_id: i.fileId as string }));
       const payload: ProductCreateRequest = {
         description: description || null,
-        images: sessionImages.map((i) => ({
-          filename: i.filename,
-          data_url: i.dataUrl,
-        })),
+        images,
       };
       return api.post<ProductCreatedResponse>("/products", payload);
     },
@@ -184,6 +249,22 @@ export default function CameraPage() {
       });
       return;
     }
+    if (anyUploading) {
+      toast({
+        title: "صبر کن آپلود تموم بشه",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (anyFailed) {
+      toast({
+        title: "آپلود بعضی عکس‌ها ناموفق بود",
+        description: "روی دکمه تلاش مجدد بزن یا عکس‌های خطادار رو حذف کن.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!allUploaded) return;
     submit.mutate();
   };
 
@@ -228,12 +309,10 @@ export default function CameraPage() {
             <Card className="bg-background/90 p-3 text-foreground backdrop-blur space-y-3">
               <div className="flex gap-1 overflow-x-auto">
                 {sessionImages.slice(-4).map((img) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <ThumbWithStatus
                     key={img.id}
-                    src={img.dataUrl}
-                    alt={img.filename}
-                    className="h-12 w-12 rounded object-cover"
+                    image={img}
+                    onRetry={() => handleRetry(img.id)}
                   />
                 ))}
               </div>
@@ -246,9 +325,11 @@ export default function CameraPage() {
               <Button
                 className="w-full"
                 onClick={handleSubmit}
-                disabled={submit.isPending}
+                disabled={submit.isPending || !allUploaded}
               >
-                اتمام و محصول جدید
+                {anyUploading
+                  ? "در حال آپلود عکس‌ها..."
+                  : "اتمام و محصول جدید"}
               </Button>
             </Card>
           </div>
@@ -296,12 +377,10 @@ export default function CameraPage() {
           <Card className="max-w-xs space-y-3 bg-background/90 p-3 text-foreground backdrop-blur">
             <div className="flex gap-1 overflow-x-auto">
               {sessionImages.slice(-4).map((img) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <ThumbWithStatus
                   key={img.id}
-                  src={img.dataUrl}
-                  alt={img.filename}
-                  className="h-12 w-12 rounded object-cover"
+                  image={img}
+                  onRetry={() => handleRetry(img.id)}
                 />
               ))}
             </div>
@@ -332,9 +411,13 @@ export default function CameraPage() {
             <Button
               className="w-full"
               onClick={handleSubmit}
-              disabled={submit.isPending}
+              disabled={submit.isPending || !allUploaded}
             >
-              {submit.isPending ? "در حال ارسال..." : "اتمام و محصول جدید"}
+              {submit.isPending
+                ? "در حال ارسال..."
+                : anyUploading
+                  ? "در حال آپلود عکس‌ها..."
+                  : "اتمام و محصول جدید"}
             </Button>
           </Card>
         </div>
@@ -366,6 +449,40 @@ export default function CameraPage() {
         onTopup={() => setTopupOpen(true)}
       />
       <TopupDialog open={topupOpen} onOpenChange={setTopupOpen} />
+    </div>
+  );
+}
+
+function ThumbWithStatus({
+  image,
+  onRetry,
+}: {
+  image: SessionImage;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="relative h-12 w-12 shrink-0 rounded overflow-hidden bg-muted">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={image.previewUrl}
+        alt={image.filename}
+        className="h-full w-full object-cover"
+      />
+      {image.uploading ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+          <Loader2 className="h-4 w-4 animate-spin text-white" />
+        </div>
+      ) : image.error ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="absolute inset-0 flex items-center justify-center bg-rose-600/70 text-white"
+          aria-label="تلاش مجدد"
+          title={image.error}
+        >
+          <RotateCw className="h-4 w-4" />
+        </button>
+      ) : null}
     </div>
   );
 }
