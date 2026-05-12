@@ -2,12 +2,10 @@
 
 import * as React from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TopupDialog } from "@/components/topup-dialog";
 import {
   api,
   type Paginated,
@@ -96,8 +94,6 @@ function TransactionSkeleton() {
 }
 
 export default function PaymentsPage() {
-  const [topupOpen, setTopupOpen] = React.useState(false);
-
   const {
     data,
     isLoading,
@@ -120,19 +116,11 @@ export default function PaymentsPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <div className="flex items-center justify-between gap-3 px-4 h-14">
+      <header className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+        <div className="flex items-center justify-between gap-3 px-4 h-12">
           <h1 className="text-sm font-semibold truncate">
             پرداخت‌ها و موجودی
           </h1>
-          <Button
-            size="sm"
-            onClick={() => setTopupOpen(true)}
-            className="shrink-0"
-          >
-            <Plus className="h-4 w-4 ms-1" />
-            افزایش موجودی
-          </Button>
         </div>
       </header>
 
@@ -168,8 +156,6 @@ export default function PaymentsPage() {
           </>
         )}
       </main>
-
-      <TopupDialog open={topupOpen} onOpenChange={setTopupOpen} />
     </>
   );
 }

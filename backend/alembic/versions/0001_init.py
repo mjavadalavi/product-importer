@@ -43,31 +43,37 @@ def _now() -> sa.TextClause:
 general_type_enum = sa.Enum(
     "WITHDRAW", "DEPOSIT",
     name="general_type_enum",
+    create_type=False,
 )
 
 reference_type_enum = sa.Enum(
     "PRODUCT", "SUBSCRIPTION", "PAYMENT", "REFERRAL", "GIFT", "REQUEST_AMOUNT",
     name="reference_type_enum",
+    create_type=False,
 )
 
 transaction_status_enum = sa.Enum(
     "PENDING", "COMPLETED", "FAILED", "REVERSED",
     name="transaction_status_enum",
+    create_type=False,
 )
 
 product_status_enum = sa.Enum(
     "DRAFT", "PROCESSING", "READY", "SUBMITTED", "FAILED",
     name="product_status_enum",
+    create_type=False,
 )
 
 job_status_enum = sa.Enum(
     "QUEUED", "RUNNING", "SUCCEEDED", "FAILED",
     name="job_status_enum",
+    create_type=False,
 )
 
 ticket_status_enum = sa.Enum(
     "OPEN", "IN_PROGRESS", "CLOSED",
     name="ticket_status_enum",
+    create_type=False,
 )
 
 
@@ -78,13 +84,8 @@ def upgrade() -> None:
     # On SQLite, Alembic renders enums as VARCHAR, so no pre-creation
     # step is needed.
     # ------------------------------------------------------------------
-    if _is_postgresql():
-        general_type_enum.create(op.get_bind(), checkfirst=True)
-        reference_type_enum.create(op.get_bind(), checkfirst=True)
-        transaction_status_enum.create(op.get_bind(), checkfirst=True)
-        product_status_enum.create(op.get_bind(), checkfirst=True)
-        job_status_enum.create(op.get_bind(), checkfirst=True)
-        ticket_status_enum.create(op.get_bind(), checkfirst=True)
+    # Note: enum types are auto-created by SQLAlchemy when their first
+    # referencing column is created in op.create_table below.
 
     # ------------------------------------------------------------------
     # users

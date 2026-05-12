@@ -244,6 +244,7 @@ class BasalamClient:
         return await self._request("POST", "/v1/files", files=files, data=data, timeout=60.0)
 
     async def create_product(self, vendor_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        # v4: full schema with keywords/packaging_dimensions/shipping_data/etc.
         return await self._request(
-            "POST", f"/v1/vendors/{vendor_id}/products", json=payload, timeout=60.0
+            "POST", f"/v4/vendors/{vendor_id}/products", json=payload, timeout=60.0
         )

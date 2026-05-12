@@ -206,17 +206,9 @@ export default function SupportPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <div className="flex items-center justify-between gap-3 px-4 h-14">
+      <header className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+        <div className="flex items-center justify-between gap-3 px-4 h-12">
           <h1 className="text-sm font-semibold truncate">پشتیبانی</h1>
-          <Button
-            size="sm"
-            onClick={() => setNewOpen(true)}
-            className="shrink-0"
-          >
-            <Plus className="h-4 w-4 ms-1" />
-            تیکت جدید
-          </Button>
         </div>
       </header>
 
@@ -239,6 +231,16 @@ export default function SupportPage() {
           ))
         )}
       </main>
+
+      <Button
+        type="button"
+        size="icon"
+        onClick={() => setNewOpen(true)}
+        aria-label="تیکت جدید"
+        className="fixed bottom-20 left-4 z-30 h-14 w-14 rounded-full shadow-lg"
+      >
+        <Plus className="h-6 w-6" />
+      </Button>
 
       <NewTicketDialog open={newOpen} onOpenChange={setNewOpen} />
     </>

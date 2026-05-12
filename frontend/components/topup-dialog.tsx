@@ -15,9 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { digitsOnly, formatNumberFa } from "@/lib/format";
 
 const MIN_AMOUNT = 1000;
-const MAX_AMOUNT = 100000000;
+const MAX_AMOUNT = 100_000_000;
+const PRESETS = [100_000, 200_000, 500_000, 1_000_000];
 
 export function TopupDialog({
   open,
@@ -29,6 +31,12 @@ export function TopupDialog({
   const [amount, setAmount] = React.useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const numericValue = amount ? Number(amount) : 0;
+  const isValid =
+    Number.isFinite(numericValue) &&
+    numericValue >= MIN_AMOUNT &&
+    numericValue <= MAX_AMOUNT;
 
   const mutation = useMutation({
     mutationFn: async (value: number) => {
@@ -57,24 +65,27 @@ export function TopupDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const value = Number(amount);
-    if (!Number.isFinite(value) || value < MIN_AMOUNT || value > MAX_AMOUNT) {
+    if (!isValid) {
       toast({
         title: "مقدار نامعتبر",
-        description: `مبلغ باید بین ${MIN_AMOUNT} و ${MAX_AMOUNT} باشد.`,
+        description: `مبلغ باید بین ${formatNumberFa(MIN_AMOUNT)} و ${formatNumberFa(MAX_AMOUNT)} تومان باشد.`,
         variant: "destructive",
       });
       return;
     }
-    mutation.mutate(value);
+    mutation.mutate(numericValue);
   };
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setAmount("");
-    }
+    if (!next) setAmount("");
     onOpenChange(next);
   };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAmount(digitsOnly(e.target.value));
+  };
+
+  const displayValue = amount ? formatNumberFa(amount) : "";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -83,25 +94,49 @@ export function TopupDialog({
           <DialogHeader>
             <DialogTitle>افزایش موجودی</DialogTitle>
             <DialogDescription>
-              مبلغ مورد نظر را به تومان وارد کن.
+              مبلغ مورد نظر را به تومان وارد کن یا یکی از مبلغ‌های پیشنهادی را انتخاب کن.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-2 py-4">
-            <Label htmlFor="topup-amount">مبلغ</Label>
-            <Input
-              id="topup-amount"
-              type="number"
-              inputMode="numeric"
-              min={MIN_AMOUNT}
-              max={MAX_AMOUNT}
-              step={1000}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="مثلاً 50000"
-              disabled={mutation.isPending}
-              required
-            />
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="topup-amount">مبلغ (تومان)</Label>
+              <Input
+                id="topup-amount"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={displayValue}
+                onChange={handleChange}
+                placeholder="۵۰،۰۰۰"
+                disabled={mutation.isPending}
+                dir="ltr"
+                className="text-right tabular-nums text-lg"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                {amount
+                  ? `${formatNumberFa(amount)} تومان`
+                  : `بین ${formatNumberFa(MIN_AMOUNT)} تا ${formatNumberFa(MAX_AMOUNT)} تومان`}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {PRESETS.map((value) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={Number(amount) === value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAmount(String(value))}
+                  disabled={mutation.isPending}
+                >
+                  {formatNumberFa(value)} تومان
+                </Button>
+              ))}
+            </div>
           </div>
+
           <DialogFooter className="gap-2">
             <Button
               type="button"
@@ -111,8 +146,8 @@ export function TopupDialog({
             >
               انصراف
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              ثبت درخواست
+            <Button type="submit" disabled={mutation.isPending || !isValid}>
+              {mutation.isPending ? "در حال ثبت..." : "ثبت درخواست"}
             </Button>
           </DialogFooter>
         </form>

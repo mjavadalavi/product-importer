@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 const COOKIE = process.env.SESSION_COOKIE_NAME || "pi_session";
 
-const PROTECTED = ["/home", "/products", "/payments", "/support", "/camera"];
+const PROTECTED = ["/home", "/products", "/payments", "/support", "/camera", "/import"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

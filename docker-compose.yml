@@ -1,20 +1,4 @@
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: importer
-      POSTGRES_PASSWORD: importer
-      POSTGRES_DB: importer
-    ports:
-      - "5432:5432"
-    volumes:
-      - db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "importer"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   backend:
     build: ./backend
     env_file: ./backend/.env

@@ -31,7 +31,7 @@ export function HomeHeader() {
     me?.name?.trim()?.charAt(0)?.toUpperCase() || "؟";
 
   return (
-    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+    <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
       <div className="flex items-center justify-between gap-3 px-4 h-14">
         <div className="flex items-center gap-2 min-w-0">
           {isLoading ? (
