@@ -38,3 +38,9 @@ htmlcov/
 
 # Old legacy build artefacts of the prototype
 backend/legacy/__pycache__/
+
+# Local file storage for uploaded blobs (managed by FileService)
+backend/var/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
