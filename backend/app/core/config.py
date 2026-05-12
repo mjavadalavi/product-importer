@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     cost_per_product: int = 1
     signup_gift_amount: int = 0
 
+    # File upload settings
+    file_storage_dir: str = "./var/files"
+    max_upload_mb: int = 50
+    allowed_upload_kinds: list[str] = [
+        "product_image",
+        "bulk_sheet",
+        "bulk_zip",
+        "support_attachment",
+        "misc",
+    ]
+
     app_origin: str = "http://localhost:3000"
     session_cookie_name: str = "pi_session"
     session_ttl_days: int = 7

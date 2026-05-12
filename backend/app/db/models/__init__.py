@@ -1,3 +1,4 @@
+from app.db.models.file import File, FileStatus
 from app.db.models.import_job import ImportJob, JobStatus
 from app.db.models.oauth_account import OAuthAccount
 from app.db.models.product import Product, ProductStatus
@@ -20,4 +21,6 @@ __all__ = [
     "JobStatus",
     "SupportTicket",
     "TicketStatus",
+    "File",
+    "FileStatus",
 ]

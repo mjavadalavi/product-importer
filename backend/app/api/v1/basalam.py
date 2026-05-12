@@ -5,17 +5,15 @@ from time import time as _now
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.crypto import decrypt_token
 from app.auth.deps import require_user
-from app.db.models.oauth_account import OAuthAccount
 from app.db.models.user import User
 from app.db.session import get_db
+from app.repositories.user import OAuthAccountRepository
 from app.schemas.basalam import CategoriesResponse
-from app.services.basalam import BasalamClient
-from app.services.basalam.categories import _extract_category_items, _flatten_categories
+from app.services.basalam_service import BasalamService
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +40,13 @@ def _cache_set(key: tuple[Any, str], value: Any) -> None:
     _cache[key] = (_now() + _CACHE_TTL, value)
 
 
-async def _get_oauth(db: AsyncSession, user: User) -> OAuthAccount:
-    result = await db.execute(
-        select(OAuthAccount).where(
-            OAuthAccount.user_id == user.id,
-            OAuthAccount.provider == "basalam",
-        )
-    )
-    oauth = result.scalar_one_or_none()
+async def _basalam_for(user: User, db: AsyncSession) -> BasalamService:
+    """Resolve the user's Basalam OAuth token and return a ready BasalamService."""
+    oauth_repo = OAuthAccountRepository(db)
+    oauth = await oauth_repo.get_for_user(user.id, provider="basalam")
     if oauth is None:
-        raise HTTPException(status_code=401, detail="اتصال باسلام موجود نیست")
-    return oauth
+        raise HTTPException(status_code=401, detail="اتصال باسلام موجود نیست.")
+    return BasalamService(token=decrypt_token(oauth.access_token_enc))
 
 
 @router.get("/categories", response_model=CategoriesResponse)
@@ -68,12 +62,9 @@ async def get_categories(
         logger.debug("get_categories cache_hit user=%s", user.id)
         return cached
 
-    oauth = await _get_oauth(db, user)
-    access_token = decrypt_token(oauth.access_token_enc)
-    client = BasalamClient(token=access_token)
-
-    raw = await client.get_categories()
-    flat = _flatten_categories(_extract_category_items(raw))
+    svc = await _basalam_for(user, db)
+    raw = await svc.get_categories()
+    flat = svc.flatten_categories(raw)
 
     response = CategoriesResponse(raw=raw, flat=flat)
     _cache_set(cache_key, response)
@@ -89,12 +80,7 @@ async def get_category_attributes(
 ) -> Any:
     logger.info("get_category_attributes user=%s category_id=%s", user.id, category_id)
 
-    oauth = await _get_oauth(db, user)
-    access_token = decrypt_token(oauth.access_token_enc)
-    client = BasalamClient(token=access_token)
-
-    result = await client.get_category_attributes(category_id, vendor_id=user.vendor_id)
-    logger.info(
-        "get_category_attributes done user=%s category_id=%s", user.id, category_id
-    )
+    svc = await _basalam_for(user, db)
+    result = await svc.get_category_attributes(category_id, vendor_id=user.vendor_id)
+    logger.info("get_category_attributes done user=%s category_id=%s", user.id, category_id)
     return result

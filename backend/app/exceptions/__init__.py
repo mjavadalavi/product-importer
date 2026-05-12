@@ -1,10 +1,4 @@
-"""
-Shim — re-exports all exception classes from their new canonical locations.
-
-All existing code that imports from app.core.exceptions continues to work
-without modification. New code should import directly from app.exceptions.*.
-"""
-from app.exceptions.base import AppException, DomainError, app_exception_handler
+from app.exceptions.base import AppException, DomainError
 from app.exceptions.auth import AuthError
 from app.exceptions.wallet import InsufficientBalance
 from app.exceptions.product import NotFoundError
@@ -14,7 +8,6 @@ from app.exceptions.openrouter import OpenRouterError
 __all__ = [
     "AppException",
     "DomainError",
-    "app_exception_handler",
     "AuthError",
     "InsufficientBalance",
     "NotFoundError",
