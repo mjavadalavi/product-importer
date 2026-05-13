@@ -1,0 +1,61 @@
+name: Deploy product-importer to iran-server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: product-importer-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, product-importer]
+    timeout-minutes: 25
+
+    steps:
+      - name: Update working copy
+        working-directory: /opt/product-importer
+        run: |
+          set -euo pipefail
+          git fetch --prune origin
+          git reset --hard "origin/${GITHUB_REF_NAME}"
+          git clean -fd -e backend/.env -e frontend/.env.local -e backend/var
+
+      - name: Verify env files
+        working-directory: /opt/product-importer
+        run: |
+          test -s backend/.env || { echo "::error::backend/.env missing"; exit 1; }
+          test -s frontend/.env.local || { echo "::error::frontend/.env.local missing"; exit 1; }
+          test "$(stat -c %a backend/.env)" = "600" || { echo "::error::backend/.env must be mode 0600"; exit 1; }
+
+      - name: Ensure apps-network exists
+        run: docker network create apps-network 2>/dev/null || true
+
+      - name: Build & start stack
+        working-directory: /opt/product-importer
+        env:
+          COMPOSE_PROJECT_NAME: product-importer
+        run: |
+          docker compose -f docker-compose.deploy.yml up -d --build --remove-orphans
+
+      - name: Healthcheck
+        working-directory: /opt/product-importer
+        env:
+          COMPOSE_PROJECT_NAME: product-importer
+        run: |
+          set -euo pipefail
+          sleep 10
+          docker ps --filter "name=product-importer-" --format "table {{.Names}}\t{{.Status}}"
+          for c in product-importer-backend product-importer-frontend; do
+            state=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)
+            if [ "$state" != "running" ]; then
+              echo "ERROR: $c is not running (state=$state)" >&2
+              docker logs --tail 100 "$c" || true
+              exit 1
+            fi
+          done
+
+      - name: Prune dangling images
+        run: docker image prune -f

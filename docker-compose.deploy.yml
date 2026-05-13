@@ -1,0 +1,42 @@
+services:
+  backend:
+    build: ./backend
+    container_name: product-importer-backend
+    restart: always
+    ports:
+      - "127.0.0.1:8081:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - TZ=Asia/Tehran
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - apps-network
+
+  frontend:
+    build: ./frontend
+    container_name: product-importer-frontend
+    restart: always
+    ports:
+      - "127.0.0.1:3002:3000"
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      - TZ=Asia/Tehran
+      - NODE_ENV=production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - apps-network
+
+networks:
+  apps-network:
+    external: true
