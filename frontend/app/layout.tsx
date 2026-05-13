@@ -14,6 +14,11 @@ const vazirmatn = Vazirmatn({
 export const metadata: Metadata = {
   title: "Product Importer",
   description: "Product importer dashboard",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

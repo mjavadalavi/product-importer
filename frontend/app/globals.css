@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    /* Basalam vendor theme — primary derived from Timcheh vendor.scss #1c2575 */
+    /* Shahicon brand — primary teal #00b0a5 (HSL 176 100% 34%); accent variants from icon #b6e9ea */
     --background: 0 0% 100%;
     --foreground: 240 23% 12%;
     --card: 0 0% 100%;
     --card-foreground: 240 23% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 23% 12%;
-    --primary: 234 62% 28%;
+    --primary: 176 100% 34%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 234 78% 96%;
-    --secondary-foreground: 234 62% 28%;
+    --secondary: 181 56% 92%;
+    --secondary-foreground: 176 100% 24%;
     --muted: 240 6% 96%;
     --muted-foreground: 240 4% 46%;
-    --accent: 234 78% 96%;
-    --accent-foreground: 234 62% 28%;
+    --accent: 181 56% 88%;
+    --accent-foreground: 176 100% 24%;
     --destructive: 350 80% 40%;
     --destructive-foreground: 0 0% 100%;
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 234 62% 28%;
+    --ring: 176 100% 34%;
     --radius: 0.5rem;
   }
 

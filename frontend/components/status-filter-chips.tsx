@@ -55,7 +55,7 @@ export function StatusFilterChips({
       value: "PROCESSING",
       label: "در حال پردازش",
       count: counts.processing,
-      activeClass: "bg-blue-600 text-white border-blue-600",
+      activeClass: "bg-teal-600 text-white border-teal-600",
     },
     {
       value: "READY",

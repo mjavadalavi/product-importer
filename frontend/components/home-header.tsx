@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { api, type MeResponse } from "@/lib/api";
@@ -34,6 +35,14 @@ export function HomeHeader() {
     <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
       <div className="flex items-center justify-between gap-3 px-4 h-14">
         <div className="flex items-center gap-2 min-w-0">
+          <Image
+            src="/logo.svg"
+            alt="Shah logo"
+            width={32}
+            height={32}
+            priority
+            className="h-8 w-8 shrink-0"
+          />
           {isLoading ? (
             <>
               <Skeleton className="h-9 w-9 rounded-full" />
