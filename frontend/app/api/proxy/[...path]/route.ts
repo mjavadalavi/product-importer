@@ -26,11 +26,22 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
 
   // Redirect passthrough — rewrite backend /api/v1/* Location to /api/proxy/*
   // so the browser stays on the proxy hostname and proxy keeps handling.
+  // FastAPI may emit either a relative path (/api/v1/foo/) or an absolute URL
+  // built from the upstream Host header (http://product-importer-backend:8000/api/v1/foo/),
+  // so we parse path-only regardless.
   if (upstream.status >= 300 && upstream.status < 400) {
     const original = upstream.headers.get("location") || "/";
-    const rewritten = original.startsWith("/api/v1/")
-      ? "/api/proxy/" + original.slice("/api/v1/".length)
-      : original;
+    let path = original;
+    try {
+      // Absolute URL? extract pathname + search
+      const u = new URL(original);
+      path = u.pathname + u.search;
+    } catch {
+      // Relative path — keep as is
+    }
+    const rewritten = path.startsWith("/api/v1/")
+      ? "/api/proxy/" + path.slice("/api/v1/".length)
+      : path;
     const res = NextResponse.redirect(rewritten, { status: upstream.status as 302 });
     const setCookies = upstream.headers.getSetCookie?.() ?? [];
     for (const c of setCookies) res.headers.append("set-cookie", c);
