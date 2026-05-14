@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     enhance_cost_per_image: int = 5000  # toman, charged per manual image enhance
     signup_gift_amount: int = 0
 
+    # ── Payment bridge (Shopyaar pay.ejourney.ir compatible) ───────────────
+    payment_bridge_url: str = ""
+    payment_bridge_api_key: str = ""
+    payment_bridge_callback_url: str = ""
+    payment_bridge_timeout_ms: int = 15_000
+    payment_bridge_enabled: bool = False
+    payment_bridge_bypass: bool = False
+
     # File upload settings
     file_storage_dir: str = "./var/files"
     max_upload_mb: int = 50
