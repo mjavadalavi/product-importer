@@ -42,8 +42,13 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
     const rewrittenPath = path.startsWith("/api/v1/")
       ? "/api/proxy/" + path.slice("/api/v1/".length)
       : path;
-    const absoluteRedirect = new URL(rewrittenPath, req.nextUrl);
-    const res = NextResponse.redirect(absoluteRedirect, { status: upstream.status as 302 });
+    // Emit a raw redirect with a relative Location so the browser resolves it
+    // against the public origin (avoids leaking the internal Next.js hostname
+    // that NextResponse.redirect would bake in).
+    const res = new NextResponse(null, {
+      status: upstream.status,
+      headers: { location: rewrittenPath },
+    });
     const setCookies = upstream.headers.getSetCookie?.() ?? [];
     for (const c of setCookies) res.headers.append("set-cookie", c);
     return res;
