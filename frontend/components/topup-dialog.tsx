@@ -40,17 +40,39 @@ export function TopupDialog({
 
   const mutation = useMutation({
     mutationFn: async (value: number) => {
-      return api.post("/ledger/topup", { amount: value });
+      return api.post<{
+        transaction_id: string;
+        token: string;
+        url: string;
+        bypass: boolean;
+      }>("/wallet/topup", { amount: value });
     },
-    onSuccess: () => {
-      toast({
-        title: "درخواست شما ثبت شد",
-        description: "پس از تأیید ادمین به موجودی اضافه می‌شه.",
-      });
+    onSuccess: (result) => {
+      // Always invalidate so the PENDING deposit shows up in the wallet
+      // card even if the user never finishes the gateway flow.
       queryClient.invalidateQueries({ queryKey: ["me"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       setAmount("");
       onOpenChange(false);
+
+      if (result.bypass) {
+        toast({
+          title: "درگاه پرداخت در حالت تست",
+          description: "تراکنش به‌صورت آزمایشی ثبت شد.",
+        });
+        return;
+      }
+
+      if (typeof window !== "undefined" && result.url) {
+        // Redirect to gateway; it will redirect back to /payment/callback
+        window.location.href = result.url;
+      } else {
+        toast({
+          title: "آدرس درگاه دریافت نشد",
+          description: "لطفاً دوباره تلاش کنید.",
+          variant: "destructive",
+        });
+      }
     },
     onError: (err: unknown) => {
       const message =
