@@ -224,7 +224,11 @@ class AuthService(LoggerMixin):
             Dict with keys: id, basalam_user_id, vendor_id, name, username,
             avatar_url, balance.
         """
-        balance = await self.tx_repo.compute_balance(user.id)
+        # Show the user the *available* balance: completed deposits minus
+        # completed withdraws minus pending withdraws. This way a product
+        # confirmation immediately reflects in the wallet card instead of
+        # only after the AI pipeline finishes.
+        balance = await self.tx_repo.compute_available_balance(user.id)
         self.logger.debug("get_me_payload user_id=%s balance=%s", user.id, balance)
         return {
             "id": user.id,

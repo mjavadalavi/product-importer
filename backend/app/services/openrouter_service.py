@@ -71,6 +71,11 @@ Use realistic studio lighting, balanced exposure, clean contrast, natural color,
 Choose a simple, category-appropriate background based only on the visible product type. The background must stay minimal, neutral, non-distracting, and marketplace-safe.
 Remove clutter and simplify the original background only when it does not change the product itself.
 
+MANDATORY MODESTY POLICY (Iranian marketplace compliance):
+If the product is women's clothing or any apparel worn by a female model — including, but not limited to, dresses, blouses, manteaux, hijabs, shawls, scarves, skirts, pants, lingerie, swimwear, sportswear, abayas, chadors, tunics, kaftans, jumpsuits, and any women's outerwear or innerwear — you MUST completely remove all visible parts of any female human body from the final image. Do not show face, hair, neck, throat, chest, cleavage, shoulders, arms, hands, wrists, fingers, midriff, navel, hips, legs, knees, ankles, or feet. No skin, no body silhouette, no hair strands, no facial features (including eyes, lips, makeup, eyebrows), and no body curves should remain visible.
+Achieve this by rendering the garment alone — either flat-lay style on a clean neutral surface, or as if worn on an invisible mannequin / ghost-mannequin that has no visible body parts, only the garment shape. Preserve the garment's exact cut, color, pattern, fabric, stitching, and accessories. Do not invent or add a different person.
+This rule overrides all other styling preferences and applies even when only a small portion of skin or hair was visible in the original image.
+
 Do not add props, hands, packaging, decorations, text, watermark, badge, price, label, or brand elements that are not already present on the product.
 Return only the edited image.
 """.strip()
