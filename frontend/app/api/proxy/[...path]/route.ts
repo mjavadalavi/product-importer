@@ -20,9 +20,12 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
   const bodyBuffer =
     ["GET", "HEAD"].includes(req.method) ? undefined : await req.arrayBuffer();
 
-  // Follow upstream redirects internally so trailing-slash 307s from FastAPI
-  // do not leak Location headers that the browser would then misroute.
-  // Capped at 5 hops to avoid loops.
+  // Follow upstream redirects internally ONLY when they stay inside the
+  // backend API (/api/v1/...) — this hides FastAPI's trailing-slash 307s
+  // from the browser without breaking real redirects (e.g. SSO 302 to
+  // basalam.com or a backend redirect to /home), which must be forwarded
+  // so the browser navigates. Capped at 5 hops to avoid loops.
+  const apiBaseUrl = new URL(API_BASE);
   let currentUrl = url.toString();
   let upstream: Response | null = null;
   for (let hop = 0; hop < 5; hop++) {
@@ -35,8 +38,26 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
     if (upstream.status < 300 || upstream.status >= 400) break;
     const loc = upstream.headers.get("location");
     if (!loc) break;
-    // Resolve next URL against current request URL (handles relative + absolute)
-    currentUrl = new URL(loc, currentUrl).toString();
+    const nextUrl = new URL(loc, currentUrl);
+    const sameApiHost = nextUrl.host === apiBaseUrl.host;
+    const stillUnderApiV1 = nextUrl.pathname.startsWith("/api/v1/");
+    if (!sameApiHost || !stillUnderApiV1) {
+      // External redirect (Basalam SSO, frontend /home, etc.) — let the
+      // browser see it. Rewrite same-host /api/v1/* back to /api/proxy/*
+      // so callers stay on the proxy mount.
+      const rewrittenPath =
+        sameApiHost && nextUrl.pathname.startsWith("/api/v1/")
+          ? "/api/proxy/" + nextUrl.pathname.slice("/api/v1/".length) + nextUrl.search
+          : nextUrl.toString();
+      const res = new NextResponse(null, {
+        status: upstream.status,
+        headers: { location: rewrittenPath },
+      });
+      const setCookies = upstream.headers.getSetCookie?.() ?? [];
+      for (const c of setCookies) res.headers.append("set-cookie", c);
+      return res;
+    }
+    currentUrl = nextUrl.toString();
   }
   if (!upstream) {
     return new NextResponse("upstream unreachable", { status: 502 });
