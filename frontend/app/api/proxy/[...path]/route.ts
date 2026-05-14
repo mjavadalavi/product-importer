@@ -17,41 +17,29 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
   if (contentType) headers.set("content-type", contentType);
   headers.set("accept", "application/json");
 
-  const init: RequestInit = { method: req.method, headers, redirect: "manual" };
-  if (!["GET", "HEAD"].includes(req.method)) {
-    init.body = await req.arrayBuffer();
-  }
+  const bodyBuffer =
+    ["GET", "HEAD"].includes(req.method) ? undefined : await req.arrayBuffer();
 
-  const upstream = await fetch(url.toString(), init);
-
-  // Redirect passthrough — rewrite backend /api/v1/* Location to /api/proxy/*
-  // so the browser stays on the proxy hostname and proxy keeps handling.
-  // FastAPI may emit either a relative path (/api/v1/foo/) or an absolute URL
-  // built from the upstream Host header (http://product-importer-backend:8000/api/v1/foo/),
-  // so we parse path-only regardless.
-  if (upstream.status >= 300 && upstream.status < 400) {
-    const original = upstream.headers.get("location") || "/";
-    let path = original;
-    try {
-      // Absolute URL? extract pathname + search
-      const u = new URL(original);
-      path = u.pathname + u.search;
-    } catch {
-      // Relative path — keep as is
-    }
-    const rewrittenPath = path.startsWith("/api/v1/")
-      ? "/api/proxy/" + path.slice("/api/v1/".length)
-      : path;
-    // Emit a raw redirect with a relative Location so the browser resolves it
-    // against the public origin (avoids leaking the internal Next.js hostname
-    // that NextResponse.redirect would bake in).
-    const res = new NextResponse(null, {
-      status: upstream.status,
-      headers: { location: rewrittenPath },
+  // Follow upstream redirects internally so trailing-slash 307s from FastAPI
+  // do not leak Location headers that the browser would then misroute.
+  // Capped at 5 hops to avoid loops.
+  let currentUrl = url.toString();
+  let upstream: Response | null = null;
+  for (let hop = 0; hop < 5; hop++) {
+    upstream = await fetch(currentUrl, {
+      method: req.method,
+      headers,
+      redirect: "manual",
+      body: bodyBuffer,
     });
-    const setCookies = upstream.headers.getSetCookie?.() ?? [];
-    for (const c of setCookies) res.headers.append("set-cookie", c);
-    return res;
+    if (upstream.status < 300 || upstream.status >= 400) break;
+    const loc = upstream.headers.get("location");
+    if (!loc) break;
+    // Resolve next URL against current request URL (handles relative + absolute)
+    currentUrl = new URL(loc, currentUrl).toString();
+  }
+  if (!upstream) {
+    return new NextResponse("upstream unreachable", { status: 502 });
   }
 
   const body = await upstream.arrayBuffer();
