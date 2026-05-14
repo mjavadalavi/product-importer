@@ -298,6 +298,24 @@ async def attach_images(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /{product_id}  — delete a product (DRAFT / READY / FAILED only)
+# ---------------------------------------------------------------------------
+
+@router.delete(
+    "/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a product (only DRAFT / READY / FAILED; refunds the withdraw)",
+)
+async def delete_product(
+    product_id: UUID,
+    user: Annotated[User, Depends(require_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    await ProductService(db).delete_for_user(user, product_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
 # DELETE /{product_id}/images/{image_id}  — remove one image from a DRAFT
 # ---------------------------------------------------------------------------
 

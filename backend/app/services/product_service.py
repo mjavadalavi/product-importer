@@ -64,6 +64,12 @@ EDITABLE_IMAGE_STATUSES: set[ProductStatus] = {
     ProductStatus.FAILED,
 }
 
+DELETABLE_STATUSES: set[ProductStatus] = {
+    ProductStatus.DRAFT,
+    ProductStatus.READY,
+    ProductStatus.FAILED,
+}
+
 
 class ProductService(LoggerMixin):
     def __init__(self, session: AsyncSession):
@@ -172,6 +178,26 @@ class ProductService(LoggerMixin):
 
     async def get_for_user(self, user: User, product_id: UUID) -> Product:
         return await self._get_owned(user, product_id, with_images=True)
+
+    async def delete_for_user(self, user: User, product_id: UUID) -> None:
+        product = await self._get_owned(user, product_id, with_images=False)
+        if product.status not in DELETABLE_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="حذف فقط برای محصولات پیش‌نویس، نیاز به تکمیل یا خطا خورده ممکن است.",
+            )
+        # Refund the original withdraw if still active
+        if product.withdraw_tx_id is not None:
+            prev_tx = await self.session.get(Transaction, product.withdraw_tx_id)
+            if prev_tx is not None and prev_tx.status != TransactionStatus.REVERSED:
+                await self.ledger.reverse_transaction(prev_tx.id)
+        # product_images and import_jobs cascade-delete via FK ondelete=CASCADE
+        await self.session.delete(product)
+        await self.session.commit()
+        self.logger.info(
+            "delete_for_user user=%s product=%s status=%s",
+            user.id, product_id, product.status,
+        )
 
     # ------------------------------------------------------------------
     # update + push to Basalam if already submitted there

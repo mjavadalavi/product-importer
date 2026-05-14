@@ -268,3 +268,87 @@ async def test_patch_product_updates_fields(
     product = product_result.scalar_one_or_none()
     assert product is not None
     assert product.name == "Updated Product Name"
+
+
+async def test_delete_product_draft_reverses_withdraw(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user,
+    auth_cookie,
+):
+    """DELETE /products/{id} on a deletable status removes the row and
+    reverses the original withdraw transaction."""
+    user = await make_user()
+    await _give_balance(db_session, user.id, 5)
+    await db_session.flush()
+
+    cookies = auth_cookie(user)
+    create_resp = await client.post(
+        "/api/v1/products/",
+        json=_product_payload(1),
+        cookies=cookies,
+    )
+    assert create_resp.status_code == 201
+    product_id_str = create_resp.json()["product_id"]
+    product_id = _uuid_module.UUID(product_id_str)
+
+    # Force status into DRAFT (POST handler ends in PROCESSING because of enqueue).
+    product = await db_session.get(Product, product_id)
+    assert product is not None
+    product.status = ProductStatus.DRAFT
+    await db_session.commit()
+    tx_id_before = product.withdraw_tx_id
+    assert tx_id_before is not None
+
+    delete_resp = await client.delete(
+        f"/api/v1/products/{product_id_str}",
+        cookies=cookies,
+    )
+    assert delete_resp.status_code == 204
+
+    # Product row gone.
+    gone = await db_session.execute(select(Product).where(Product.id == product_id))
+    assert gone.scalar_one_or_none() is None
+
+    # Original withdraw tx now REVERSED.
+    tx = await db_session.get(Transaction, tx_id_before)
+    assert tx is not None
+    assert tx.status == TransactionStatus.REVERSED
+
+
+async def test_delete_product_blocked_for_submitted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user,
+    auth_cookie,
+):
+    """DELETE /products/{id} on SUBMITTED status must return 409."""
+    user = await make_user()
+    await _give_balance(db_session, user.id, 5)
+    await db_session.flush()
+
+    cookies = auth_cookie(user)
+    create_resp = await client.post(
+        "/api/v1/products/",
+        json=_product_payload(1),
+        cookies=cookies,
+    )
+    assert create_resp.status_code == 201
+    product_id_str = create_resp.json()["product_id"]
+    product_id = _uuid_module.UUID(product_id_str)
+
+    product = await db_session.get(Product, product_id)
+    assert product is not None
+    product.status = ProductStatus.SUBMITTED
+    await db_session.commit()
+
+    delete_resp = await client.delete(
+        f"/api/v1/products/{product_id_str}",
+        cookies=cookies,
+    )
+    assert delete_resp.status_code == 409
+
+    # Product row still present.
+    still = await db_session.get(Product, product_id)
+    assert still is not None
+    assert still.status == ProductStatus.SUBMITTED
