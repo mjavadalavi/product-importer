@@ -192,6 +192,93 @@ def _extract_provider_error_items(detail: Any) -> list[dict[str, Any]]:
     return []
 
 
+# ---------------------------------------------------------------------------
+# Human-readable Persian messages for common Basalam / generic HTTP failures.
+# Used when Basalam returns a non-structured error so the user sees something
+# actionable instead of "خطای API باسلام".
+# ---------------------------------------------------------------------------
+
+_BASALAM_HTTP_PERSIAN: dict[int, str] = {
+    400: "درخواست به باسلام نامعتبر است. لطفاً اطلاعات محصول را بررسی کنید.",
+    401: "نشست شما با باسلام منقضی شده. لطفاً دوباره وارد شوید.",
+    403: "اجازه دسترسی به این عملیات در باسلام را ندارید.",
+    404: "آدرس درخواستی در باسلام پیدا نشد.",
+    409: "اطلاعات این محصول با موارد قبلی تداخل دارد.",
+    413: "حجم اطلاعات ارسالی بیش از حد مجاز است.",
+    422: "اطلاعات محصول مورد قبول باسلام نیست. لطفاً فیلدها را بازبینی کنید.",
+    429: "تعداد درخواست‌ها زیاد شد. لطفاً چند لحظه صبر کنید و دوباره تلاش کنید.",
+    500: "خطای داخلی در باسلام. لطفاً کمی بعد دوباره تلاش کنید.",
+    502: "ارتباط با باسلام برقرار نشد. لطفاً مجدداً تلاش کنید.",
+    503: "سرویس باسلام در حال حاضر در دسترس نیست. کمی بعد امتحان کنید.",
+    504: "پاسخ باسلام بیش از حد طول کشید. کمی بعد دوباره تلاش کنید.",
+}
+
+# Free-text English snippets occasionally returned by upstreams; map to Persian.
+_BASALAM_TEXT_PERSIAN: list[tuple[str, str]] = [
+    ("unauthorized", "نشست شما با باسلام منقضی شده. لطفاً دوباره وارد شوید."),
+    ("forbidden", "اجازه دسترسی به این عملیات در باسلام را ندارید."),
+    ("not found", "آدرس درخواستی در باسلام پیدا نشد."),
+    ("bad request", "درخواست به باسلام نامعتبر است. لطفاً اطلاعات محصول را بررسی کنید."),
+    ("validation", "اطلاعات محصول مورد قبول باسلام نیست. لطفاً فیلدها را بازبینی کنید."),
+    ("internal server", "خطای داخلی در باسلام. لطفاً کمی بعد دوباره تلاش کنید."),
+    ("service unavailable", "سرویس باسلام در حال حاضر در دسترس نیست. کمی بعد امتحان کنید."),
+    ("timeout", "پاسخ باسلام بیش از حد طول کشید. کمی بعد دوباره تلاش کنید."),
+    ("too many requests", "تعداد درخواست‌ها زیاد شد. لطفاً چند لحظه صبر کنید."),
+    ("rate limit", "تعداد درخواست‌ها زیاد شد. لطفاً چند لحظه صبر کنید."),
+]
+
+
+def _basalam_error_to_persian(exc: BasalamError) -> str:
+    """Pick the best Persian message for a BasalamError.
+
+    Order:
+        1. A Persian-looking message embedded in the response detail
+           (Basalam normally returns Persian strings — surface them as-is).
+        2. A known English phrase translated to Persian.
+        3. The status-code default in _BASALAM_HTTP_PERSIAN.
+        4. The exception's own message.
+    """
+    detail = exc.detail
+    if isinstance(detail, dict):
+        for key in ("message", "msg", "error", "title", "detail"):
+            value = detail.get(key)
+            if isinstance(value, str) and value.strip():
+                # Persian characters in range U+0600..U+06FF — surface verbatim.
+                if any("؀" <= ch <= "ۿ" for ch in value):
+                    return value.strip()
+        # As a fallback, look for the first Persian string inside items[].message
+        for item in _extract_provider_error_items(detail):
+            message = item.get("message") or item.get("msg")
+            if isinstance(message, str) and any("؀" <= c <= "ۿ" for c in message):
+                return message.strip()
+
+    text_blob = ""
+    if isinstance(detail, str):
+        text_blob = detail
+    elif isinstance(detail, dict):
+        try:
+            import json as _json
+            text_blob = _json.dumps(detail, ensure_ascii=False)
+        except Exception:
+            text_blob = ""
+
+    lowered = text_blob.lower()
+    for needle, persian in _BASALAM_TEXT_PERSIAN:
+        if needle in lowered:
+            return persian
+
+    status_code = getattr(exc, "status", None) or getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        mapped = _BASALAM_HTTP_PERSIAN.get(status_code)
+        if mapped:
+            return mapped
+
+    raw = str(exc).strip()
+    if raw and raw != "خطای API باسلام":
+        return raw
+    return "خطای ناشناخته در ارتباط با باسلام. لطفاً دوباره تلاش کنید."
+
+
 def _build_provider_field_errors(exc: BasalamError) -> dict[str, list[str]]:
     """Build a field_errors dict from a BasalamError, mirroring JS applyProviderErrors."""
     field_errors: dict[str, list[str]] = {}
@@ -783,7 +870,7 @@ class ProcessingService(LoggerMixin):
 
             if isinstance(exc, BasalamError):
                 error_payload = _build_provider_field_errors(exc)
-                error_payload["message"] = str(exc)
+                error_payload["message"] = _basalam_error_to_persian(exc)
                 if exc.detail is not None:
                     error_payload["provider_detail"] = exc.detail
                 product.errors = error_payload

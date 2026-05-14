@@ -434,6 +434,27 @@ async def test_ai_call_service_records_success_and_error(
     assert error_row.error_message == "upstream timeout"
 
 
+def test_basalam_error_to_persian_prefers_persian_message_then_status_then_text():
+    from app.core.exceptions import BasalamError
+    from app.services.processing_service import _basalam_error_to_persian
+
+    # 1. Persian message already inside detail → surface verbatim.
+    exc = BasalamError("خطای API باسلام", 422, {"message": "نام محصول الزامی است."})
+    assert _basalam_error_to_persian(exc) == "نام محصول الزامی است."
+
+    # 2. English snippet inside detail → translated.
+    exc = BasalamError("خطای API باسلام", 400, {"detail": "Validation failed"})
+    assert "بازبینی" in _basalam_error_to_persian(exc)
+
+    # 3. No message, only status code → mapped to its Persian default.
+    exc = BasalamError("خطای API باسلام", 503, None)
+    assert "دسترس" in _basalam_error_to_persian(exc)
+
+    # 4. Unknown status, generic exc message → exc message wins.
+    exc = BasalamError("اطلاعات وندور یافت نشد.", 418, None)
+    assert _basalam_error_to_persian(exc) == "اطلاعات وندور یافت نشد."
+
+
 def test_openrouter_extract_usage_parses_response_body():
     """_extract_usage builds the dict AiCallService expects."""
     from app.services.openrouter_service import _extract_usage

@@ -361,7 +361,7 @@ export default function CameraPage() {
         size="icon"
         onClick={handleClose}
         aria-label="بستن"
-        className="absolute left-4 top-4 z-20 text-white hover:bg-white/10 hover:text-white"
+        className="absolute right-4 top-4 z-20 text-white hover:bg-white/10 hover:text-white"
       >
         <X className="h-6 w-6" />
       </Button>
