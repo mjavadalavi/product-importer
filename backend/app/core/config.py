@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     openrouter_image_model: str = "google/gemini-2.5-flash-image"
 
     cost_per_product: int = 1
+    enhance_cost_per_image: int = 5000  # toman, charged per manual image enhance
     signup_gift_amount: int = 0
 
     # File upload settings

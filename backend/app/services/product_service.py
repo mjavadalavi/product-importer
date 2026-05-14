@@ -583,6 +583,18 @@ class ProductService(LoggerMixin):
         from app.db.models.ai_call import AiCallKind
         from app.services.ai_call_service import AiCallService
 
+        # Charge for the enhance up-front so the user cannot run unlimited
+        # enhances. The withdraw is created PENDING and either completed on
+        # success or reversed on failure.
+        settings = get_settings()
+        cost = settings.enhance_cost_per_image
+        tx = await self.ledger.withdraw(
+            user_id=user.id,
+            reference_type=ReferenceType.PRODUCT,
+            reference_id=None,
+            amount=cost,
+        )
+
         ai_calls = AiCallService(self.session)
         openrouter = OpenRouterService()
         try:
@@ -600,6 +612,8 @@ class ProductService(LoggerMixin):
                 kind=AiCallKind.ENHANCE,
                 usage=openrouter.last_usage,
             )
+            # Image was actually delivered → settle the charge.
+            await self.ledger.complete_transaction(tx.id)
         except OpenRouterError as exc:
             target.enhancement_error = str(exc)
             target.use_enhanced = False
@@ -607,9 +621,11 @@ class ProductService(LoggerMixin):
                 user_id=user.id,
                 product_id=product.id,
                 kind=AiCallKind.ENHANCE,
-                model=str(get_settings().openrouter_image_model),
+                model=str(settings.openrouter_image_model),
                 error_message=str(exc),
             )
+            # AI failed → refund the user.
+            await self.ledger.reverse_transaction(tx.id)
             await self.session.commit()
             raise HTTPException(
                 status_code=502,
