@@ -24,10 +24,14 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
 
   const upstream = await fetch(url.toString(), init);
 
-  // Redirect passthrough
+  // Redirect passthrough — rewrite backend /api/v1/* Location to /api/proxy/*
+  // so the browser stays on the proxy hostname and proxy keeps handling.
   if (upstream.status >= 300 && upstream.status < 400) {
-    const location = upstream.headers.get("location") || "/";
-    const res = NextResponse.redirect(location, { status: upstream.status as 302 });
+    const original = upstream.headers.get("location") || "/";
+    const rewritten = original.startsWith("/api/v1/")
+      ? "/api/proxy/" + original.slice("/api/v1/".length)
+      : original;
+    const res = NextResponse.redirect(rewritten, { status: upstream.status as 302 });
     const setCookies = upstream.headers.getSetCookie?.() ?? [];
     for (const c of setCookies) res.headers.append("set-cookie", c);
     return res;
