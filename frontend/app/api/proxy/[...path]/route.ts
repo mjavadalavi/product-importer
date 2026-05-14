@@ -39,10 +39,11 @@ async function handler(req: NextRequest, { params }: { params: { path: string[] 
     } catch {
       // Relative path — keep as is
     }
-    const rewritten = path.startsWith("/api/v1/")
+    const rewrittenPath = path.startsWith("/api/v1/")
       ? "/api/proxy/" + path.slice("/api/v1/".length)
       : path;
-    const res = NextResponse.redirect(rewritten, { status: upstream.status as 302 });
+    const absoluteRedirect = new URL(rewrittenPath, req.nextUrl);
+    const res = NextResponse.redirect(absoluteRedirect, { status: upstream.status as 302 });
     const setCookies = upstream.headers.getSetCookie?.() ?? [];
     for (const c of setCookies) res.headers.append("set-cookie", c);
     return res;
