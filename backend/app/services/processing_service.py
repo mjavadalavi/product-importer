@@ -613,6 +613,11 @@ class ProcessingService(LoggerMixin):
                     product_id,
                     product.errors,
                 )
+                # AI work is done — the user only needs to fill in the missing
+                # fields. Charge the pending withdraw now so the balance reflects
+                # what they have actually consumed.
+                if product.withdraw_tx_id:
+                    await self.ledger.complete_transaction(product.withdraw_tx_id)
                 await db.flush()
                 await db.commit()
                 return

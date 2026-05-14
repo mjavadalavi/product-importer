@@ -104,18 +104,13 @@ class ProductService(LoggerMixin):
     # ------------------------------------------------------------------
 
     async def create_with_images(self, user: User, request: ProductCreateRequest) -> Product:
-        settings = get_settings()
-        cost = settings.cost_per_product
+        """Create a product as a DRAFT. No balance is touched and no processing
+        is enqueued: the user must explicitly call confirm_draft to start AI
+        processing and be charged. This matches the product-level requirement
+        that nothing is processed without explicit user confirmation."""
         self.logger.info(
-            "create_with_images user=%s images=%d cost=%d",
-            user.id, len(request.images), cost,
-        )
-
-        tx = await self.ledger.withdraw(
-            user_id=user.id,
-            reference_type=ReferenceType.PRODUCT,
-            reference_id=None,
-            amount=cost,
+            "create_with_images user=%s images=%d",
+            user.id, len(request.images),
         )
 
         product = Product(user_id=user.id, status=ProductStatus.DRAFT)
@@ -155,9 +150,6 @@ class ProductService(LoggerMixin):
                     file, target_type="product", target_id=product.id
                 )
 
-        product.withdraw_tx_id = tx.id
-        product.status = ProductStatus.PROCESSING
-        await self.jobs.enqueue(product.id)
         await self.session.commit()
         await self.session.refresh(product, attribute_names=["images"])
         return product

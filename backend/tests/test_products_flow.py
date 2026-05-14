@@ -57,45 +57,18 @@ def _product_payload(image_count: int = 1) -> dict:
 # Tests
 # ---------------------------------------------------------------------------
 
-async def test_create_product_insufficient_balance(
+async def test_create_product_saves_as_draft_without_charge(
     client: AsyncClient,
     db_session: AsyncSession,
     make_user,
     auth_cookie,
 ):
-    """POST /products with 0 balance should return 402."""
+    """POST /products creates a DRAFT, never charges, never enqueues.
+    The user must explicitly confirm to start processing."""
     user = await make_user()
-    # No deposit — balance is 0.
+    # No deposit — balance is 0, but DRAFT creation should still work.
     cookies = auth_cookie(user)
 
-    response = await client.post(
-        "/api/v1/products/",
-        json=_product_payload(1),
-        cookies=cookies,
-    )
-    assert response.status_code == 402
-
-
-async def test_create_product_charges_and_enqueues(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    make_user,
-    auth_cookie,
-):
-    """
-    POST /products with sufficient balance should:
-    - Return 201 with status PROCESSING.
-    - Create a Product row.
-    - Create a ProductImage row.
-    - Create a PENDING WITHDRAW PRODUCT transaction.
-    - Create an ImportJob with status QUEUED.
-    """
-    settings = get_settings()
-    user = await make_user()
-    await _give_balance(db_session, user.id, 5)
-    await db_session.flush()
-
-    cookies = auth_cookie(user)
     response = await client.post(
         "/api/v1/products/",
         json=_product_payload(1),
@@ -104,44 +77,96 @@ async def test_create_product_charges_and_enqueues(
 
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "PROCESSING"
+    assert body["status"] == "DRAFT"
 
-    product_id_str = body["product_id"]
-    product_id = _uuid_module.UUID(product_id_str)
+    product_id = _uuid_module.UUID(body["product_id"])
 
-    # Product row exists.
-    product_result = await db_session.execute(
-        select(Product).where(Product.id == product_id)
+    product = await db_session.get(Product, product_id)
+    assert product is not None
+    assert product.status == ProductStatus.DRAFT
+    assert product.withdraw_tx_id is None  # no charge
+
+    images = (
+        await db_session.execute(
+            select(ProductImage).where(ProductImage.product_id == product_id)
+        )
+    ).scalars().all()
+    assert len(images) == 1
+
+    # No transaction and no import job exist.
+    tx = (
+        await db_session.execute(
+            select(Transaction).where(
+                Transaction.user_id == user.id,
+                Transaction.general_type == GeneralType.WITHDRAW,
+                Transaction.reference_type == ReferenceType.PRODUCT,
+            )
+        )
+    ).scalar_one_or_none()
+    assert tx is None
+
+    job = (
+        await db_session.execute(
+            select(ImportJob).where(ImportJob.product_id == product_id)
+        )
+    ).scalar_one_or_none()
+    assert job is None
+
+
+async def test_confirm_draft_charges_and_enqueues(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user,
+    auth_cookie,
+):
+    """POST /products/{id}/confirm on a DRAFT with enough balance withdraws
+    the cost as PENDING, enqueues the job, and moves status to PROCESSING."""
+    settings = get_settings()
+    user = await make_user()
+    await _give_balance(db_session, user.id, settings.cost_per_product * 2)
+    await db_session.flush()
+
+    cookies = auth_cookie(user)
+    create_resp = await client.post(
+        "/api/v1/products/",
+        json=_product_payload(1),
+        cookies=cookies,
     )
-    product = product_result.scalar_one_or_none()
+    assert create_resp.status_code == 201
+    product_id_str = create_resp.json()["product_id"]
+
+    confirm_resp = await client.post(
+        f"/api/v1/products/{product_id_str}/confirm",
+        cookies=cookies,
+    )
+    assert confirm_resp.status_code == 200
+    assert confirm_resp.json()["status"] == "PROCESSING"
+
+    product_id = _uuid_module.UUID(product_id_str)
+    product = await db_session.get(Product, product_id)
     assert product is not None
     assert product.status == ProductStatus.PROCESSING
 
-    # Image row exists.
-    img_result = await db_session.execute(
-        select(ProductImage).where(ProductImage.product_id == product_id)
-    )
-    images = img_result.scalars().all()
-    assert len(images) == 1
-
     # PENDING WITHDRAW PRODUCT transaction exists.
-    tx_result = await db_session.execute(
-        select(Transaction).where(
-            Transaction.user_id == user.id,
-            Transaction.general_type == GeneralType.WITHDRAW,
-            Transaction.reference_type == ReferenceType.PRODUCT,
-            Transaction.status == TransactionStatus.PENDING,
-            Transaction.amount == settings.cost_per_product,
+    tx = (
+        await db_session.execute(
+            select(Transaction).where(
+                Transaction.user_id == user.id,
+                Transaction.general_type == GeneralType.WITHDRAW,
+                Transaction.reference_type == ReferenceType.PRODUCT,
+                Transaction.status == TransactionStatus.PENDING,
+                Transaction.amount == settings.cost_per_product,
+            )
         )
-    )
-    tx = tx_result.scalar_one_or_none()
+    ).scalar_one_or_none()
     assert tx is not None
 
     # ImportJob exists with QUEUED status.
-    job_result = await db_session.execute(
-        select(ImportJob).where(ImportJob.product_id == product_id)
-    )
-    job = job_result.scalar_one_or_none()
+    job = (
+        await db_session.execute(
+            select(ImportJob).where(ImportJob.product_id == product_id)
+        )
+    ).scalar_one_or_none()
     assert job is not None
     assert job.status == JobStatus.QUEUED
 
@@ -292,7 +317,13 @@ async def test_delete_product_draft_reverses_withdraw(
     product_id_str = create_resp.json()["product_id"]
     product_id = _uuid_module.UUID(product_id_str)
 
-    # Force status into DRAFT (POST handler ends in PROCESSING because of enqueue).
+    # POST creates DRAFT without a charge — confirm it so a withdraw exists,
+    # then put status back to DRAFT for the deletion test.
+    confirm_resp = await client.post(
+        f"/api/v1/products/{product_id_str}/confirm",
+        cookies=cookies,
+    )
+    assert confirm_resp.status_code == 200
     product = await db_session.get(Product, product_id)
     assert product is not None
     product.status = ProductStatus.DRAFT
@@ -314,6 +345,43 @@ async def test_delete_product_draft_reverses_withdraw(
     tx = await db_session.get(Transaction, tx_id_before)
     assert tx is not None
     assert tx.status == TransactionStatus.REVERSED
+
+
+async def test_processing_completes_pending_withdraw_when_status_becomes_ready(
+    db_session: AsyncSession,
+    make_user,
+):
+    """Once AI processing reaches the READY state (user needs to fill in fields),
+    the pending product withdraw must be marked COMPLETED so the balance
+    reflects the actual spend instead of staying pending forever."""
+    settings = get_settings()
+    user = await make_user()
+    await _give_balance(db_session, user.id, settings.cost_per_product * 2)
+    await db_session.flush()
+
+    # Manually simulate the state created by confirm_draft just before AI ran.
+    product = Product(user_id=user.id, status=ProductStatus.PROCESSING)
+    db_session.add(product)
+    await db_session.flush()
+
+    tx = await ledger.withdraw(
+        db_session,
+        user_id=user.id,
+        ref_type=ReferenceType.PRODUCT,
+        ref_id=None,
+        amount=settings.cost_per_product,
+    )
+    product.withdraw_tx_id = tx.id
+    await db_session.commit()
+
+    # Now mark transaction COMPLETED via the same path processing_service uses.
+    from app.services.ledger_service import LedgerService
+    await LedgerService(db_session).complete_transaction(tx.id)
+    await db_session.commit()
+
+    refreshed_tx = await db_session.get(Transaction, tx.id)
+    assert refreshed_tx is not None
+    assert refreshed_tx.status == TransactionStatus.COMPLETED
 
 
 async def test_ai_call_service_records_success_and_error(
