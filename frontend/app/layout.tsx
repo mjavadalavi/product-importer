@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Vazirmatn } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/lib/query";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -29,12 +28,10 @@ export default function RootLayout({
   return (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
       <body className={`${vazirmatn.variable} font-sans antialiased`}>
-        <ThemeProvider defaultTheme="system" storageKey="ui-theme">
-          <QueryProvider>
-            {children}
-            <Toaster />
-          </QueryProvider>
-        </ThemeProvider>
+        <QueryProvider>
+          {children}
+          <Toaster />
+        </QueryProvider>
       </body>
     </html>
   );
