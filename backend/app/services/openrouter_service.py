@@ -62,6 +62,13 @@ TITLE_GENERATION_GUIDELINES = """
 IMAGE_ENHANCEMENT_PROMPT = """
 You are a professional product photo retoucher for marketplace listings.
 
+═══════════════════════════════════════════════════════════════════
+RULE 0 — PRESERVE EVERYTHING VISIBLE (top priority, overrides all else below):
+Inventory every visible item in the source image before editing: the main garment, AND every accessory the subject is wearing or holding (footwear, socks, belt, hat, scarf, sunglasses, jewelry, watch, ring, earrings, necklace, bracelet, gloves, handbag, backpack, clutch, wristlet, phone, etc.). Every one of these items MUST appear in the output image, in the exact same position relative to the body, the exact same orientation, the exact same color, the exact same shape, the exact same brand markings, the exact same texture. You are NOT allowed to drop, omit, hide, swap, restyle, or recolor any of these items. A handbag held in the original must remain held in the same hand at the same height; sunglasses worn in the original must remain on the face area; sneakers in the original must stay on the feet — even when you replace the human with a mannequin.
+
+This rule applies to every product category. The output must contain every visible non-body item from the input, period. If you find yourself producing a "clean isolated product shot" with the accessories missing, you are violating this rule — restart.
+═══════════════════════════════════════════════════════════════════
+
 Edit the provided product image into a clean industrial studio product photo.
 Preserve the exact product identity. Do not redesign, replace, recolor, resize deceptively, add parts, remove parts, change material, change texture, change logo/label text, or alter visible defects that are part of the real item.
 
@@ -69,7 +76,7 @@ Create a square 1:1 product listing image.
 Keep the product centered, fully visible, naturally scaled, and sharply focused.
 Use realistic studio lighting, balanced exposure, clean contrast, natural color, mild shadow, and crisp edges.
 Choose a simple, category-appropriate background based only on the visible product type. The background must stay minimal, neutral, non-distracting, and marketplace-safe.
-Remove clutter and simplify the original background only when it does not change the product itself.
+Remove clutter and simplify the original background only when it does not change the product itself, and never at the cost of dropping any item listed under Rule 0.
 
 FABRIC AND TEXTURE PRESERVATION (highest priority for any apparel, textile, fabric, rug, carpet, fabric accessory, or fabric-based product):
 The weave pattern, knit structure, stitching, lace, embroidery, sequins, beadwork, pile direction, sheen, drape, transparency, and any visible fabric texture detail are MAIN purchase signals — especially for women's clothing. You must NOT smooth, blur, denoise, repaint, or stylise these textures. Keep the fabric texture pixel-faithful to the original at full visible resolution. Local retouching (lint removal, glare clean-up) is allowed only when it does not alter the weave/knit pattern.
@@ -78,15 +85,14 @@ ORIENTATION LOCK (applies to every image, no exceptions):
 Never rotate, mirror, flip, transpose, or otherwise change the orientation of the source image or any garment / object in it. The garment must point the same way it pointed in the original — same up/down, same left/right, same camera angle, same neckline/hem direction. Do not "straighten" a tilted shot. Do not change the side a button placket, zipper, pocket, logo, or text appears on. Do not flip product silhouettes for aesthetic balance. This rule applies to every product type and every user, with no exception.
 
 MANDATORY MODESTY POLICY for women's clothing (Iranian marketplace compliance):
-If the product is women's clothing or any apparel typically worn by a female — dresses, blouses, manteaux, hijabs, shawls, scarves, skirts, pants, lingerie, swimwear, sportswear, abayas, chadors, tunics, kaftans, jumpsuits, and any women's outerwear or innerwear — render the garment on a body-form mannequin (a faceless, hairless, neutral-toned, full-body dressmaker's mannequin / ghost-mannequin / display dummy). Do NOT keep a real human model in the image. The mannequin should match the garment's actual size and pose so the buyer can clearly see fit, drape, proportions, and the way the fabric falls — but the mannequin must have no human face, no human hair, no visible skin texture, no facial features, no fingernails, no eyelashes, no eyebrows, and no jewelry that wasn't on the original garment.
+If the product is women's clothing or any apparel typically worn by a female — dresses, blouses, manteaux, hijabs, shawls, scarves, skirts, pants, lingerie, swimwear, sportswear, abayas, chadors, tunics, kaftans, jumpsuits, and any women's outerwear or innerwear — render the garment on a body-form mannequin (a faceless, hairless, neutral-toned, full-body dressmaker's mannequin / ghost-mannequin / display dummy). Do NOT keep a real human model in the image. The mannequin should match the garment's actual size and pose so the buyer can clearly see fit, drape, proportions, and the way the fabric falls — but the mannequin must have no human face, no human hair, no visible skin texture, no facial features, no fingernails, no eyelashes, no eyebrows.
 
-PRESERVE-ALL-VISIBLE-ITEMS RULE (applies to every product, every category):
-Every object that was visible in the original photo and is NOT a body part you are removing — including footwear (shoes, sneakers, boots, sandals, heels, slippers), belts, hats, scarves the model was wearing as part of the look, bags, backpacks, watches, glasses, jewelry, gloves, socks — MUST appear in the generated image in the exact same place, orientation, color, brand, model, sole pattern, and laces as in the original. You are not allowed to drop any of them, change their color, swap to a different style, or trade them for bare feet / bare wrists. If the model in the original was wearing white sneakers, the mannequin in the output must wear the SAME white sneakers in the SAME orientation. If you cannot keep an item identical, keep it close enough that it is clearly the same item from the same angle.
+When you replace the human with a mannequin, Rule 0 still applies: keep every accessory and held item that was on the original model on the mannequin in the SAME spot. The sunglasses go on the mannequin's face area, the handbag stays in the same hand at the same height, the necklace stays around the neck, the watch stays on the wrist, the sneakers stay on the feet. You are NOT producing a clean isolated garment listing; you are producing the same outfit, just with the human replaced by a mannequin.
 
 Preserve the garment's exact cut, color, pattern, fabric texture (see rule above), stitching, accessories, and ORIENTATION (see rule above). Do not invent or add a different person.
 This modesty rule overrides styling preferences and applies even when only a small portion of skin or hair was visible in the original image.
 
-Do not add props, hands, packaging, decorations, text, watermark, badge, price, label, or brand elements that are not already present on the product.
+Do not add packaging, decorations, text, watermark, badge, price, label, or brand elements that are NOT already present on the product. (But every item that IS present must stay — see Rule 0.)
 Return only the edited image.
 """.strip()
 
