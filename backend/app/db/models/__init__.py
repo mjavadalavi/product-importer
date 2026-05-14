@@ -1,3 +1,4 @@
+from app.db.models.ai_call import AiCall, AiCallKind, AiCallStatus
 from app.db.models.file import File, FileStatus
 from app.db.models.import_job import ImportJob, JobStatus
 from app.db.models.oauth_account import OAuthAccount
@@ -23,4 +24,7 @@ __all__ = [
     "TicketStatus",
     "File",
     "FileStatus",
+    "AiCall",
+    "AiCallKind",
+    "AiCallStatus",
 ]

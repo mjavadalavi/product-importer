@@ -588,9 +588,12 @@ class ProductService(LoggerMixin):
                 detail="عکس اصلی برای بهبود در دسترس نیست.",
             )
         from app.core.exceptions import OpenRouterError
+        from app.db.models.ai_call import AiCallKind
+        from app.services.ai_call_service import AiCallService
 
+        ai_calls = AiCallService(self.session)
+        openrouter = OpenRouterService()
         try:
-            openrouter = OpenRouterService()
             enhanced = await openrouter.enhance_product_image(
                 image_data_url=target.original_url,
                 filename=target.filename or "product.jpg",
@@ -599,9 +602,22 @@ class ProductService(LoggerMixin):
             target.enhancement_model = enhanced.get("model")
             target.enhancement_error = None
             target.use_enhanced = True
+            await ai_calls.record_success(
+                user_id=user.id,
+                product_id=product.id,
+                kind=AiCallKind.ENHANCE,
+                usage=openrouter.last_usage,
+            )
         except OpenRouterError as exc:
             target.enhancement_error = str(exc)
             target.use_enhanced = False
+            await ai_calls.record_error(
+                user_id=user.id,
+                product_id=product.id,
+                kind=AiCallKind.ENHANCE,
+                model=str(get_settings().openrouter_image_model),
+                error_message=str(exc),
+            )
             await self.session.commit()
             raise HTTPException(
                 status_code=502,

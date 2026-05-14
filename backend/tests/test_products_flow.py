@@ -316,6 +316,85 @@ async def test_delete_product_draft_reverses_withdraw(
     assert tx.status == TransactionStatus.REVERSED
 
 
+async def test_ai_call_service_records_success_and_error(
+    db_session: AsyncSession,
+    make_user,
+):
+    """AiCallService.record_success / record_error persist rows."""
+    from app.db.models.ai_call import AiCall, AiCallKind, AiCallStatus
+    from app.services.ai_call_service import AiCallService
+
+    user = await make_user()
+    svc = AiCallService(db_session)
+
+    await svc.record_success(
+        user_id=user.id,
+        product_id=None,
+        kind=AiCallKind.ANALYZE,
+        usage={
+            "model": "google/gemini-2.5-flash",
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "total_tokens": 150,
+            "cost_usd": 0.000123,
+            "generation_id": "gen-abc",
+        },
+    )
+    await svc.record_error(
+        user_id=user.id,
+        product_id=None,
+        kind=AiCallKind.ENHANCE,
+        model="google/gemini-2.5-flash-image",
+        error_message="upstream timeout",
+    )
+    await db_session.commit()
+
+    rows = (await db_session.execute(select(AiCall).order_by(AiCall.created_at))).scalars().all()
+    assert len(rows) == 2
+
+    success_row = next(r for r in rows if r.status == AiCallStatus.SUCCESS)
+    assert success_row.kind == AiCallKind.ANALYZE
+    assert success_row.model == "google/gemini-2.5-flash"
+    assert success_row.prompt_tokens == 100
+    assert success_row.completion_tokens == 50
+    assert float(success_row.cost_usd) == 0.000123
+    assert success_row.generation_id == "gen-abc"
+
+    error_row = next(r for r in rows if r.status == AiCallStatus.ERROR)
+    assert error_row.kind == AiCallKind.ENHANCE
+    assert error_row.cost_usd == 0
+    assert error_row.error_message == "upstream timeout"
+
+
+def test_openrouter_extract_usage_parses_response_body():
+    """_extract_usage builds the dict AiCallService expects."""
+    from app.services.openrouter_service import _extract_usage
+
+    usage = _extract_usage(
+        {
+            "id": "gen-xyz",
+            "usage": {
+                "prompt_tokens": 12,
+                "completion_tokens": 7,
+                "total_tokens": 19,
+                "cost": 0.0004567,
+            },
+        },
+        model="google/gemini-2.5-flash",
+    )
+    assert usage["model"] == "google/gemini-2.5-flash"
+    assert usage["prompt_tokens"] == 12
+    assert usage["completion_tokens"] == 7
+    assert usage["total_tokens"] == 19
+    assert usage["cost_usd"] == 0.0004567
+    assert usage["generation_id"] == "gen-xyz"
+
+    # Missing usage block → cost defaults to 0.
+    empty = _extract_usage({"id": None}, model="m")
+    assert empty["cost_usd"] == 0
+    assert empty["model"] == "m"
+
+
 async def test_delete_product_blocked_for_submitted(
     client: AsyncClient,
     db_session: AsyncSession,

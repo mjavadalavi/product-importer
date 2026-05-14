@@ -12,6 +12,25 @@ from app.utils.logging import LoggerMixin
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+
+def _extract_usage(body: dict[str, Any], model: str) -> dict[str, Any]:
+    """Extract usage + cost from an OpenRouter chat-completions response.
+
+    Returns a dict with keys: model, prompt_tokens, completion_tokens,
+    total_tokens, cost_usd, generation_id. Safe to call on partial bodies.
+    """
+    usage = body.get("usage") or {}
+    return {
+        "model": model,
+        "prompt_tokens": usage.get("prompt_tokens"),
+        "completion_tokens": usage.get("completion_tokens"),
+        "total_tokens": usage.get("total_tokens"),
+        # OpenRouter returns the real billed cost in `usage.cost` (USD)
+        # only when the request body contained `usage: {"include": true}`.
+        "cost_usd": float(usage.get("cost") or 0),
+        "generation_id": body.get("id"),
+    }
+
 TITLE_GENERATION_GUIDELINES = """
 شما یک متخصص SEO و نام‌گذاری محصول در پلتفرم «باسلام» هستید که بر اساس دستورالعمل‌های مدیر سرچ باسلام عمل می‌کنید.
 
@@ -244,6 +263,9 @@ class OpenRouterService(LoggerMixin):
         No persistent HTTP session is held — each call opens its own httpx client.
         """
         self._api_key = api_key
+        # Populated after each successful chat-completions call so callers can
+        # persist usage/cost alongside the result. See _extract_usage for keys.
+        self.last_usage: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -368,8 +390,11 @@ Detection rules:
             "temperature": 0.2,
             "max_tokens": 2200,
             "response_format": {"type": "json_object"},
+            # Ask OpenRouter to include billed cost in the response.usage.
+            "usage": {"include": True},
         }
 
+        self.last_usage = None
         self.logger.debug("analyzing product image model=%s", selected_model)
         async with httpx.AsyncClient(timeout=90.0) as client:
             try:
@@ -392,6 +417,7 @@ Detection rules:
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise OpenRouterError("پاسخ OpenRouter قابل خواندن نبود.", 502, response.text) from exc
 
+        self.last_usage = _extract_usage(body, selected_model)
         if isinstance(text, list):
             text = "".join(part.get("text", "") for part in text if isinstance(part, dict))
         parsed = _extract_json(str(text))
@@ -427,8 +453,11 @@ Detection rules:
             "modalities": ["image", "text"],
             "image_config": {"aspect_ratio": "1:1"},
             "temperature": 0.1,
+            # Ask OpenRouter to include billed cost in the response.usage.
+            "usage": {"include": True},
         }
 
+        self.last_usage = None
         self.logger.debug("enhancing product image model=%s", selected_model)
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
@@ -450,6 +479,7 @@ Detection rules:
         except ValueError as exc:
             raise OpenRouterError("پاسخ بهبود عکس JSON معتبر نبود.", 502, response.text) from exc
 
+        self.last_usage = _extract_usage(body, selected_model)
         image_url = _extract_image_url(body.get("choices"))
         if not image_url:
             raise OpenRouterError("OpenRouter تصویر بهبود‌یافته برنگرداند.", 502, body)

@@ -239,6 +239,8 @@ class ProcessingService(LoggerMixin):
         self.oauth_repo = OAuthAccountRepository(session)
         self.ledger = LedgerService(session)
         self.openrouter = OpenRouterService()
+        from app.services.ai_call_service import AiCallService
+        self.ai_calls = AiCallService(session)
 
     async def process_product_job(self, product_id: UUID) -> None:
         """Orchestrate the full AI-analyze → price-suggest → Basalam-submit pipeline for one product."""
@@ -347,6 +349,13 @@ class ProcessingService(LoggerMixin):
                     img.enhanced_url = result["enhanced_image_data_url"]
                     img.enhancement_model = result.get("model")
                     img.use_enhanced = True
+                    from app.db.models.ai_call import AiCallKind
+                    await self.ai_calls.record_success(
+                        user_id=user.id,
+                        product_id=product.id,
+                        kind=AiCallKind.ENHANCE,
+                        usage=self.openrouter.last_usage,
+                    )
                 except Exception as enhance_exc:
                     self.logger.warning(
                         "process_product_job: image enhancement failed img_id=%s error=%s",
@@ -355,6 +364,14 @@ class ProcessingService(LoggerMixin):
                     )
                     img.enhancement_error = str(enhance_exc)
                     img.use_enhanced = False
+                    from app.db.models.ai_call import AiCallKind
+                    await self.ai_calls.record_error(
+                        user_id=user.id,
+                        product_id=product.id,
+                        kind=AiCallKind.ENHANCE,
+                        model="image",
+                        error_message=str(enhance_exc),
+                    )
 
             # --------------------------------------------------------------
             # Step 6: AI analyze first image
@@ -362,10 +379,27 @@ class ProcessingService(LoggerMixin):
             first_image = images[0]
             analyze_url = first_image.original_url or ""
             self.logger.info("process_product_job: analyzing product image product_id=%s", product_id)
-            analysis = await self.openrouter.analyze_product_image(
-                image_data_url=analyze_url,
-                categories=categories_for_ai,
-            )
+            from app.db.models.ai_call import AiCallKind
+            try:
+                analysis = await self.openrouter.analyze_product_image(
+                    image_data_url=analyze_url,
+                    categories=categories_for_ai,
+                )
+                await self.ai_calls.record_success(
+                    user_id=user.id,
+                    product_id=product.id,
+                    kind=AiCallKind.ANALYZE,
+                    usage=self.openrouter.last_usage,
+                )
+            except Exception as analyze_exc:
+                await self.ai_calls.record_error(
+                    user_id=user.id,
+                    product_id=product.id,
+                    kind=AiCallKind.ANALYZE,
+                    model="text",
+                    error_message=str(analyze_exc),
+                )
+                raise
 
             # --------------------------------------------------------------
             # Step 7: Apply analysis to product (port of applyAnalysis)
