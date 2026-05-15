@@ -90,9 +90,13 @@ class WalletService(LoggerMixin):
         # stable phone-shaped identifier from it. When/if a real phone is
         # captured during onboarding, swap this to use user.phone directly.
         user_phone = self._user_phone_for_bridge(user)
+        # We store ledger amounts in Toman everywhere internally, but the
+        # Iranian payment bridge (pay.ejourney.ir) expects Rial. Convert
+        # at the boundary so the user sees Toman and the gateway sees Rial.
+        amount_rial = amount * 10
         try:
             bridge_response = await self.payment.create_payment(
-                amount=amount,
+                amount=amount_rial,
                 callback_url=callback_url,
                 user_phone=user_phone,
             )
