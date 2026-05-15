@@ -42,6 +42,20 @@ export default function PaymentCallbackPage() {
   );
 }
 
+// Gateway codes that mean "user cancelled / failed at the gateway, money was
+// not captured". Hitting /wallet/verify in this case is wasted RTT — the
+// bridge already told us the answer in the redirect URL.
+const FAILED_GATEWAY_STATUSES = new Set([
+  "NOK",
+  "FAILED",
+  "FAIL",
+  "CANCEL",
+  "CANCELED",
+  "CANCELLED",
+  "ERROR",
+  "DECLINED",
+]);
+
 function PaymentCallbackContent() {
   const router = useRouter();
   const params = useSearchParams();
@@ -51,6 +65,8 @@ function PaymentCallbackContent() {
   const authority =
     params?.get("authority") || params?.get("token") || params?.get("Authority");
   const gatewayStatus = params?.get("status") || params?.get("Status");
+  const normalizedGatewayStatus = gatewayStatus?.trim().toUpperCase() ?? "";
+  const gatewayAlreadyFailed = FAILED_GATEWAY_STATUSES.has(normalizedGatewayStatus);
 
   const verify = useMutation({
     mutationFn: async () => {
@@ -64,16 +80,23 @@ function PaymentCallbackContent() {
   });
 
   React.useEffect(() => {
-    if (!authority) return;
+    // Skip the verify call when the gateway already reported failure —
+    // the payment never went through, nothing to confirm.
+    if (!authority || gatewayAlreadyFailed) return;
     verify.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authority]);
+  }, [authority, gatewayAlreadyFailed]);
 
-  const isLoading = !authority ? false : verify.isPending || verify.isIdle;
-  const result = verify.data;
+  const isLoading =
+    !authority || gatewayAlreadyFailed
+      ? false
+      : verify.isPending || verify.isIdle;
+  const result = gatewayAlreadyFailed ? null : verify.data;
   const errorMessage =
-    (verify.error as { message?: string } | undefined)?.message ||
-    (!authority ? "شناسهٔ پرداخت در آدرس بازگشت وجود ندارد." : null);
+    gatewayAlreadyFailed
+      ? "پرداخت با موفقیت انجام نشد. در صورت کسر وجه، طی ۷۲ ساعت برگشت داده می‌شود."
+      : (verify.error as { message?: string } | undefined)?.message ||
+        (!authority ? "شناسهٔ پرداخت در آدرس بازگشت وجود ندارد." : null);
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-neutral-50 p-4">
@@ -109,16 +132,11 @@ function PaymentCallbackContent() {
           ) : (
             <>
               <XCircle className="mx-auto h-12 w-12 text-rose-600" />
-              <h2 className="text-lg font-semibold">پرداخت ناموفق</h2>
+              <h2 className="text-lg font-semibold">پرداخت با موفقیت انجام نشد</h2>
               <p className="text-sm text-muted-foreground">
                 {errorMessage ||
                   "پرداخت تأیید نشد. در صورت کسر وجه، طی ۷۲ ساعت برگشت داده می‌شود."}
               </p>
-              {gatewayStatus ? (
-                <p className="text-xs text-muted-foreground">
-                  وضعیت درگاه: {gatewayStatus}
-                </p>
-              ) : null}
               <div className="flex gap-2">
                 <Button
                   className="flex-1"
@@ -127,13 +145,19 @@ function PaymentCallbackContent() {
                 >
                   بازگشت
                 </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => verify.mutate()}
-                  disabled={!authority || verify.isPending}
-                >
-                  تلاش مجدد
-                </Button>
+                {/* Retrying verify only helps when the gateway said OK but our
+                    own confirmation hit a transient error — if the gateway
+                    already returned NOK, the payment was never captured and
+                    there is nothing on the server to verify. */}
+                {!gatewayAlreadyFailed ? (
+                  <Button
+                    className="flex-1"
+                    onClick={() => verify.mutate()}
+                    disabled={!authority || verify.isPending}
+                  >
+                    تلاش مجدد
+                  </Button>
+                ) : null}
               </div>
             </>
           )}
