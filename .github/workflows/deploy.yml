@@ -16,12 +16,52 @@ jobs:
 
     steps:
       - name: Update working copy
+        id: update
         working-directory: /opt/product-importer
         run: |
           set -euo pipefail
+          old_sha=$(git rev-parse HEAD || echo "")
+          echo "old_sha=$old_sha" >> "$GITHUB_OUTPUT"
           git fetch --prune origin
           git reset --hard "origin/${GITHUB_REF_NAME}"
           git clean -fd -e backend/.env -e frontend/.env.local -e backend/var
+          new_sha=$(git rev-parse HEAD)
+          echo "new_sha=$new_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Detect source changes
+        id: paths
+        working-directory: /opt/product-importer
+        run: |
+          set -euo pipefail
+          old_sha="${{ steps.update.outputs.old_sha }}"
+          new_sha="${{ steps.update.outputs.new_sha }}"
+
+          if [ -z "$old_sha" ] || ! git cat-file -e "$old_sha^{commit}" 2>/dev/null; then
+            echo "backend_changed=true"  >> "$GITHUB_OUTPUT"
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "→ no previous SHA: rebuild both with --no-cache"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$old_sha" "$new_sha" || true)
+          echo "Changed files:"; echo "$changed" | sed 's/^/  /'
+
+          # Docker's COPY-layer cache has burned us twice on this stack:
+          # the layer hashes match the previous build even though the file
+          # contents shifted, so the deployed container keeps serving the
+          # old bundle. Burn the cache for whichever service moved.
+          if echo "$changed" | grep -qE '^backend/'; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "→ backend changed"
+          else
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$changed" | grep -qE '^frontend/'; then
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "→ frontend changed"
+          else
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Verify env files
         working-directory: /opt/product-importer
@@ -33,12 +73,28 @@ jobs:
       - name: Ensure apps-network exists
         run: docker network create apps-network 2>/dev/null || true
 
+      - name: Build backend (--no-cache when backend changed)
+        if: steps.paths.outputs.backend_changed == 'true'
+        working-directory: /opt/product-importer
+        env:
+          COMPOSE_PROJECT_NAME: product-importer
+        run: docker compose -f docker-compose.deploy.yml build --no-cache backend
+
+      - name: Build frontend (--no-cache when frontend changed)
+        if: steps.paths.outputs.frontend_changed == 'true'
+        working-directory: /opt/product-importer
+        env:
+          COMPOSE_PROJECT_NAME: product-importer
+        run: docker compose -f docker-compose.deploy.yml build --no-cache frontend
+
       - name: Build & start stack
         working-directory: /opt/product-importer
         env:
           COMPOSE_PROJECT_NAME: product-importer
         run: |
-          docker compose -f docker-compose.deploy.yml up -d --build --remove-orphans
+          # --force-recreate guarantees containers restart even if the image
+          # SHA didn't shift (no-op edits that still need a fresh container).
+          docker compose -f docker-compose.deploy.yml up -d --build --force-recreate --remove-orphans
 
       - name: Healthcheck
         working-directory: /opt/product-importer
