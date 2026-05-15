@@ -18,7 +18,31 @@ type VerifyResponse = {
   ref_id: string | null;
 };
 
+function PaymentCallbackFallback() {
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-neutral-50 p-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-8 text-center space-y-4">
+          <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin" />
+          <h2 className="text-lg font-semibold">در حال آماده‌سازی...</h2>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function PaymentCallbackPage() {
+  // useSearchParams forces the page out of static prerendering, which crashes
+  // `next build` unless it sits inside a Suspense boundary. Wrap the body so
+  // the build can render the fallback statically and stream the rest.
+  return (
+    <React.Suspense fallback={<PaymentCallbackFallback />}>
+      <PaymentCallbackContent />
+    </React.Suspense>
+  );
+}
+
+function PaymentCallbackContent() {
   const router = useRouter();
   const params = useSearchParams();
   const queryClient = useQueryClient();
