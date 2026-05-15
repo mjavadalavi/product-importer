@@ -85,10 +85,16 @@ class WalletService(LoggerMixin):
             )
 
         callback_url = self._settings.payment_bridge_callback_url or None
+        # The bridge requires user_phone for SMS / reconciliation. The User
+        # model only stores basalam_user_id (no phone column), so derive a
+        # stable phone-shaped identifier from it. When/if a real phone is
+        # captured during onboarding, swap this to use user.phone directly.
+        user_phone = self._user_phone_for_bridge(user)
         try:
             bridge_response = await self.payment.create_payment(
                 amount=amount,
                 callback_url=callback_url,
+                user_phone=user_phone,
             )
         except PaymentBridgeError as exc:
             self.logger.error("Payment bridge create failed user=%s err=%s", user.id, exc)
@@ -98,7 +104,9 @@ class WalletService(LoggerMixin):
             ) from exc
 
         token = (bridge_response or {}).get("token")
-        url = (bridge_response or {}).get("url")
+        # Bridge returns the redirect URL under `payment_url`; older mocks
+        # used `url`, so accept both for forward compatibility.
+        url = (bridge_response or {}).get("payment_url") or (bridge_response or {}).get("url")
         if not token or not url:
             raise WalletError("پاسخ درگاه پرداخت معتبر نبود.", status_code=502)
 
@@ -168,6 +176,17 @@ class WalletService(LoggerMixin):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _user_phone_for_bridge(user: User) -> str:
+        """Return a phone-shaped string for the payment bridge.
+
+        Until product-importer stores real phone numbers, derive a stable
+        11-digit value from the user's basalam_user_id so each user gets a
+        unique identifier but the bridge's string-format check still passes.
+        """
+        suffix = f"{int(user.basalam_user_id):09d}"[-9:]
+        return f"09{suffix}"
 
     async def _find_pending_by_token(self, token: str) -> Transaction | None:
         result = await self.session.execute(
