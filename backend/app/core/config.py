@@ -32,13 +32,21 @@ class Settings(BaseSettings):
     enhance_cost_per_image: int = 5000  # toman, charged per manual image enhance
     signup_gift_amount: int = 0
 
-    # ── Payment bridge (Shopyaar pay.ejourney.ir compatible) ───────────────
+    # ── Payment gateway ───────────────────────────────────────────────────
+    # Adapter selection: "shopyaar" (pay.ejourney.ir bridge) | "basalam"
+    # (Basalam OpenAPI /v1/pay/*).
+    payment_provider: str = "shopyaar"
+
+    # Shopyaar pay.ejourney.ir compatible bridge
     payment_bridge_url: str = ""
     payment_bridge_api_key: str = ""
     payment_bridge_callback_url: str = ""
     payment_bridge_timeout_ms: int = 15_000
     payment_bridge_enabled: bool = False
     payment_bridge_bypass: bool = False
+
+    # Basalam OpenAPI pay gateway (uses `basalam_openapi_base` above)
+    basalam_pay_gateway_secret: str = ""
 
     # File upload settings
     file_storage_dir: str = "./var/files"

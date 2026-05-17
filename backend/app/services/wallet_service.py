@@ -17,7 +17,6 @@ Two-step flow:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -33,8 +32,11 @@ from app.db.models.transaction import (
 )
 from app.db.models.user import User
 from app.services.ledger_service import LedgerService
-from app.services.payment import PaymentService
-from app.services.payment.payment_service import PaymentBridgeError
+from app.services.payment import (
+    PaymentBridge,
+    PaymentBridgeError,
+    get_payment_bridge,
+)
 from app.utils.logging import LoggerMixin
 
 
@@ -70,7 +72,7 @@ class WalletService(LoggerMixin):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.ledger = LedgerService(session)
-        self.payment = PaymentService()
+        self.payment: PaymentBridge = get_payment_bridge()
         self._settings = get_settings()
 
     # ------------------------------------------------------------------
@@ -89,6 +91,7 @@ class WalletService(LoggerMixin):
             bridge_response = await self.payment.create_payment(
                 amount=amount,
                 callback_url=callback_url,
+                description="افزایش موجودی کیف پول",
             )
         except PaymentBridgeError as exc:
             self.logger.error("Payment bridge create failed user=%s err=%s", user.id, exc)
@@ -97,9 +100,7 @@ class WalletService(LoggerMixin):
                 status_code=502,
             ) from exc
 
-        token = (bridge_response or {}).get("token")
-        url = (bridge_response or {}).get("url")
-        if not token or not url:
+        if not bridge_response.token or not bridge_response.url:
             raise WalletError("پاسخ درگاه پرداخت معتبر نبود.", status_code=502)
 
         tx = await self.ledger.create_transaction(
@@ -110,16 +111,16 @@ class WalletService(LoggerMixin):
             amount=amount,
             status=TransactionStatus.PENDING,
             note="افزایش موجودی از طریق درگاه پرداخت",
-            idempotency_key=str(token),
+            idempotency_key=bridge_response.token,
         )
         await self.session.commit()
         await self.session.refresh(tx)
 
         return StartTopupResult(
             transaction_id=tx.id,
-            token=str(token),
-            url=str(url),
-            bypass=bool(bridge_response.get("bypass")),
+            token=bridge_response.token,
+            url=bridge_response.url,
+            bypass=bridge_response.bypass,
         )
 
     async def verify_topup(self, authority: str) -> VerifyTopupResult:
@@ -132,7 +133,7 @@ class WalletService(LoggerMixin):
             raise WalletError("تراکنش متناظر با این پرداخت یافت نشد.", status_code=404)
 
         try:
-            bridge_response: dict[str, Any] = await self.payment.verify_payment(token=authority)
+            bridge_response = await self.payment.verify_payment(token=authority)
         except PaymentBridgeError as exc:
             self.logger.error(
                 "Payment bridge verify failed authority=%s err=%s",
@@ -144,8 +145,8 @@ class WalletService(LoggerMixin):
                 status_code=502,
             ) from exc
 
-        success = bool((bridge_response or {}).get("status"))
-        ref_id = (bridge_response or {}).get("ref_id")
+        success = bridge_response.success
+        ref_id = bridge_response.ref_id
 
         if success:
             await self.ledger.complete_transaction(tx.id)
@@ -162,7 +163,7 @@ class WalletService(LoggerMixin):
             status=tx.status,
             success=success,
             amount=int(tx.amount),
-            ref_id=str(ref_id) if ref_id else None,
+            ref_id=ref_id,
         )
 
     # ------------------------------------------------------------------
