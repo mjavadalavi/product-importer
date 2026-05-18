@@ -73,7 +73,20 @@ class BasalamPaymentService(HttpAdapterBase):
 
     @property
     def bypass(self) -> bool:
-        return bool(self._settings.payment_bridge_bypass) or not self.enabled
+        return bool(self._settings.payment_bridge_bypass)
+
+    def _ensure_ready(self) -> None:
+        if self.bypass:
+            return
+        if not self.base_url:
+            raise PaymentBridgeError(
+                "Basalam payment gateway is not configured (missing BASALAM_OPENAPI_BASE).",
+            )
+        if not self.gateway_secret:
+            raise PaymentBridgeError(
+                "Basalam payment gateway is not configured "
+                "(set BASALAM_PAY_GATEWAY_SECRET, or PAYMENT_BRIDGE_BYPASS=true for dev/mock).",
+            )
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -107,6 +120,7 @@ class BasalamPaymentService(HttpAdapterBase):
                 reference_id=ref,
             )
 
+        self._ensure_ready()
         cb = callback_url or self.callback_url
         if not cb:
             raise PaymentBridgeError("callback_url is required for Basalam pay create")
@@ -155,6 +169,7 @@ class BasalamPaymentService(HttpAdapterBase):
                 bypass=True,
             )
 
+        self._ensure_ready()
         safe_token = quote(token, safe="")
         path = f"/v1/pay/transactions/{safe_token}/verify"
 

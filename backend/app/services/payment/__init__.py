@@ -24,12 +24,20 @@ from app.services.payment.basalam import BasalamPaymentService
 from app.services.payment.shopyaar import ShopyaarPaymentService
 
 
+SUPPORTED_PROVIDERS = ("shopyaar", "basalam")
+
+
 def get_payment_bridge(settings: Settings | None = None) -> PaymentBridge:
     cfg = settings or get_settings()
-    provider = (cfg.payment_provider or "shopyaar").strip().lower()
-    if provider == "basalam":
+    raw = (cfg.payment_provider or "shopyaar").strip().lower()
+    if raw in ("", "shopyaar"):
+        return ShopyaarPaymentService(cfg)
+    if raw == "basalam":
         return BasalamPaymentService(cfg)
-    return ShopyaarPaymentService(cfg)
+    raise ValueError(
+        f"unknown payment_provider={cfg.payment_provider!r}; "
+        f"allowed values: {', '.join(SUPPORTED_PROVIDERS)}",
+    )
 
 
 __all__ = [
@@ -39,6 +47,7 @@ __all__ = [
     "PaymentBridge",
     "PaymentBridgeError",
     "ShopyaarPaymentService",
+    "SUPPORTED_PROVIDERS",
     "VerifyPaymentResult",
     "get_payment_bridge",
     "mask_secret",

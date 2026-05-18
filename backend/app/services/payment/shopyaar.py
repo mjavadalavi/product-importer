@@ -55,7 +55,17 @@ class ShopyaarPaymentService(HttpAdapterBase):
 
     @property
     def bypass(self) -> bool:
-        return bool(self._settings.payment_bridge_bypass) or not self.enabled
+        return bool(self._settings.payment_bridge_bypass)
+
+    def _ensure_ready(self) -> None:
+        if self.bypass:
+            return
+        if not self.enabled:
+            raise PaymentBridgeError(
+                "Shopyaar payment bridge is not configured "
+                "(set PAYMENT_BRIDGE_URL and PAYMENT_BRIDGE_ENABLED=true, "
+                "or PAYMENT_BRIDGE_BYPASS=true for dev/mock).",
+            )
 
     def _build_url(self, pathname: str, params: dict[str, str] | None = None) -> str:
         if not self.enabled:
@@ -94,6 +104,7 @@ class ShopyaarPaymentService(HttpAdapterBase):
                 bypass=True,
             )
 
+        self._ensure_ready()
         url = self._build_url("/payments/create")
         body: dict[str, Any] = {
             "amount": int(amount),
@@ -135,6 +146,7 @@ class ShopyaarPaymentService(HttpAdapterBase):
                 bypass=True,
             )
 
+        self._ensure_ready()
         url = self._build_url("/payments/verify", params={"authority": token})
         data = await self._fetch_json(
             url, method="POST", headers=self._build_headers(),
